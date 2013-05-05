@@ -22,6 +22,11 @@
  * @file
  * common internal and external API header
  */
+ 
+//fix compiling errors on Android
+#ifndef UINT64_C
+#define UINT64_C(value)__CONCAT(value,ULL)
+#endif
 
 #ifndef AVUTIL_COMMON_H
 #define AVUTIL_COMMON_H
