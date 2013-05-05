@@ -31,7 +31,7 @@
 #define AVUTIL_COMMON_H
 
 #include <errno.h>
-#include <inttypes.h>
+#include "libavutil/inttypes.h"
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
@@ -438,3 +438,4 @@ static av_always_inline av_const int av_popcount64_c(uint64_t x)
 #ifndef av_popcount64
 #   define av_popcount64    av_popcount64_c
 #endif
+
