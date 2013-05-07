@@ -31,7 +31,11 @@
 #define AVUTIL_COMMON_H
 
 #include <errno.h>
+#ifdef _WIN32
 #include "libavutil/inttypes.h"
+#else
+#include <inttypes.h>
+#endif
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
