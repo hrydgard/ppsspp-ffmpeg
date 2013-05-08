@@ -19,6 +19,7 @@ lib*/*.a
 *-example
 *-test
 *_g
+build.log
 /.config
 /.version
 /ffmpeg
@@ -31,6 +32,7 @@ lib*/*.a
 /doc/*.3
 /doc/*.html
 /doc/*.pod
+/doc/*.texi
 /doc/avoptions_codec.texi
 /doc/avoptions_format.texi
 /doc/examples/decoding_encoding
