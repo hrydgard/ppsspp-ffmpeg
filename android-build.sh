@@ -1,8 +1,11 @@
 #!/bin/bash
 #Change NDK to your Android NDK location
-NDK=/home/cv/ndk
+NDK=/c/AndroidNDK
 PLATFORM=$NDK/platforms/android-8/arch-arm/
-PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.4.3/prebuilt/linux-x86
+PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.4.3/prebuilt/windows-x86_64
+
+
+
 
 function build_ARMv6
 {
@@ -20,13 +23,16 @@ function build_ARMv6
     --enable-static \
     --extra-ldflags="-Wl,-rpath-link=$PLATFORM/usr/lib -L$PLATFORM/usr/lib -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
+    --disable-filters \
+    --disable-encoders \
     --disable-ffplay \
     --disable-ffprobe \
     --disable-ffserver \
-    --disable-neon \
+    --disable-ffmpeg \
+    --disable-neon
 
 make clean
-make  -j4 install
+make install
 }
 
 function build_ARMv7
@@ -45,13 +51,17 @@ function build_ARMv7
     --enable-static \
     --extra-ldflags="-Wl,-rpath-link=$PLATFORM/usr/lib -L$PLATFORM/usr/lib -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
+    --disable-avfilter \
+    --disable-encoders \
+    --disable-postproc \
     --disable-ffplay \
     --disable-ffprobe \
     --disable-ffserver \
+    --disable-ffmpeg \
     --disable-neon \
 
 make clean
-make  -j4 install
+make install
 }
-build_ARMv6
+#build_ARMv6
 build_ARMv7

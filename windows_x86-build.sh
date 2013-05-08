@@ -24,7 +24,7 @@ GENERAL="
     --prefix=$PREFIX
     --arch=x86
 #    --cpu=opteron-sse3
-    --extra-cflags="-MD"
+    --extra-cflags="-MD /IWindowsInclude"
 #    --extra-ldflags="-lz"
 #    --optflags=""
     --disable-programs
@@ -274,7 +274,7 @@ echo "---- make install ----"
 make  -j4 install 2>&1 | tee build.log
 echo "---- rename and copy for ppsspp ----"
 echo "Copying inttypes.h into the build-directory."
-cp -af libavutil/inttypes.h $PREFIX/include/libavutil/
+cp -af WindowsInclude/inttypes.h $PREFIX/include/libavutil/
 if (isstaticlib) then
     pushd $PREFIX/lib
     echo "Renaming "foo.a" to "foo.lib" in the build-directory."
