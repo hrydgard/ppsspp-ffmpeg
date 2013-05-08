@@ -11,6 +11,38 @@
 # use toolchain=msvc
 # http://ffmpeg.org/platform.html#Windows
 
+#///////////////////////////////////////////////////////////////////////////////
+
+PREFIX="./Windows/x86"
+
+IS_STATIC_LIB=FALSE
+
+IS_SHARED_LIB_INTO_BIN_DIR=FALSE
+
+GENERAL="
+    --toolchain=msvc
+    --prefix=$PREFIX
+    --arch=x86
+#    --cpu=opteron-sse3
+    --extra-cflags="-MD"
+#    --extra-ldflags="-lz"
+#    --optflags=""
+    --disable-programs
+    --disable-avfilter
+    --disable-postproc
+    --disable-doc
+#    --enable-zlib
+    --disable-pthreads
+    --enable-w32threads
+    --disable-network
+    --disable-everything
+    --enable-dxva2
+#    --enable-libmp3lame
+#     --enable-vaapi
+#    --enable-vda
+#    --enable-vdpau
+"
+
 AUDIO_DECODERS="
     --enable-decoder=aac
 #    --enable-decoder=aac_latm
@@ -157,26 +189,52 @@ OUTPUT_DEVICES="
 
 FILTERS=""
 
+#///////////////////////////////////////////////////////////////////////////////
+
 append() {
     var=$1
     shift
     eval "$var=\"\$$var $*\""
 }
 
-getparams() {
-	eval "value=\"\$$1\""
-	ret=""
+isstaticlib() {
+    case "$IS_STATIC_LIB" in
+        "TRUE" | "true" | "1" ) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+isintobin() {
+    case "$IS_SHARED_LIB_INTO_BIN_DIR" in
+        "TRUE" | "true" | "1" ) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+genelatelibparams() {
+    ret=""
+    if (isstaticlib) then
+        ret=" --enable-static --disable-shared"
+    else
+        ret=" --enable-shared --disable-static"
+    fi
+    echo "$ret"
+}
+
+genelateparams() {
+    eval "value=\"\$$1\""
+    ret=""
     value=$(echo "$value" | sed "s/ //g")
-	for var in $value ; do
-	    if [ ! `echo "$var" | fgrep -o "#"` ]; then
-	        ret="$ret $var"
-	    fi
-	done
-	echo "$ret"
+    for var in $value ; do
+        if [ ! `echo "$var" | fgrep -o "#"` ]; then
+            ret="$ret $var"
+        fi
+    done
+    echo "$ret"
 }
 
 params_dump() {
-	eval "value=\"\$$1\""
+    eval "value=\"\$$1\""
     echo "---- dump configure params ----"
     IFS=" "
     for var in $value ; do
@@ -185,47 +243,26 @@ params_dump() {
     echo "---- end dump ----"
 }
 
+
 function build_ffmpeg
 {
-find ./ -type d -regex "(?:*.mak|Makefile)" | xargs dos2unix
+echo "Converting From CRLF To LF."
+find ./ -regex "\(.*\.mak\|.*Makefile\)" | xargs dos2unix
 
-#configure params.
-PARAMS="
-    --toolchain=msvc
-    --prefix=./x86
-#    --arch=x86
-#    --cpu=opteron-sse3
-#    --extra-cflags=""
-    --extra-ldflags="-lz"
-#    --optflags=""
-    --disable-programs
-    --disable-avfilter
-    --disable-postproc
-    --enable-static
-    --disable-shared
-    --disable-doc
-    --enable-zlib
-    --disable-pthreads
-    --enable-w32threads
-    --disable-network
-    --disable-everything
-    --enable-dxva2
-#    --enable-libmp3lame
-#     --enable-vaapi
-#    --enable-vda
-#    --enable-vdpau
-"
-PARAMS="$(getparams PARAMS)\
-$(echo -e "$(getparams AUDIO_DECODERS)")\
-$(echo -e "$(getparams VIDEO_DECODERS)")\
-$(echo -e "$(getparams AUDIO_ENCODERS)")\
-$(echo -e "$(getparams VIDEO_ENCODERS)")\
-$(echo -e "$(getparams BSFS)")\
-$(echo -e "$(getparams PARSERS)")\
-$(echo -e "$(getparams DEMUXERS)")\
-$(echo -e "$(getparams MUXERS)")\
-$(echo -e "$(getparams HARDWARE_ACCELS)")\
-$(echo -e "$(getparams INPUT_DEVICES)")\
+echo "Generate configure params."
+
+PARAMS="$(genelateparams GENERAL)\
+$(genelatelibparams)\
+$(echo -e "$(genelateparams AUDIO_DECODERS)")\
+$(echo -e "$(genelateparams VIDEO_DECODERS)")\
+$(echo -e "$(genelateparams AUDIO_ENCODERS)")\
+$(echo -e "$(genelateparams VIDEO_ENCODERS)")\
+$(echo -e "$(genelateparams BSFS)")\
+$(echo -e "$(genelateparams PARSERS)")\
+$(echo -e "$(genelateparams DEMUXERS)")\
+$(echo -e "$(genelateparams MUXERS)")\
+$(echo -e "$(genelateparams HARDWARE_ACCELS)")\
+$(echo -e "$(genelateparams INPUT_DEVICES)")\
 "
 params_dump PARAMS
 
@@ -235,7 +272,37 @@ echo "---- make clean ----"
 make clean
 echo "---- make install ----"
 make  -j4 install 2>&1 | tee build.log
+echo "---- rename and copy for ppsspp ----"
+echo "Copying inttypes.h into the build-directory."
+cp -af libavutil/inttypes.h $PREFIX/include/libavutil/
+if (isstaticlib) then
+    pushd $PREFIX/lib
+    echo "Renaming "foo.a" to "foo.lib" in the build-directory."
+    for fname in *.a; do
+        mv -fv $fname $(echo "$fname" | sed -e "s/lib\(.*\)\.a/\1/").lib
+    done
+    popd
+else
+    binpath=$PREFIX/bin
+    libpath=$PREFIX/lib
+    absbin=$(cd $(dirname "$binpath/*") && pwd)
+    absbin=$(echo "${absbin//\//\\}" | sed -e "s/\\\\\(.\)/\1:/")
+    pushd $libpath
+    for fname in *.def; do
+        outname=${fname%%-*}
+        if (isintobin) then
+            abspath="$absbin\\$outname.lib"
+            lib \/machine:i386 \/def:$fname \/out:$abspath
+            popd
+        	rm -fv $binpath/$outname.exp
+        	pushd $libpath
+        else
+            lib \/machine:i386 \/def:$fname \/out:$outname.lib
+            rm -fv $outname.exp
+        fi
+    done
+    popd
+fi
 echo "---- windows_x86-build.sh finished ----"
 }
 build_ffmpeg
-
