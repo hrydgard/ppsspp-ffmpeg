@@ -13,18 +13,23 @@
 
 #///////////////////////////////////////////////////////////////////////////////
 
-PREFIX="./Windows/x86"
+ARCH=x86
 
-IS_STATIC_LIB=FALSE
+PREFIX="./Windows/${ARCH}"
+
+mkdir -p ${PREFIX}
+
+IS_STATIC_LIB=TRUE
 
 IS_SHARED_LIB_INTO_BIN_DIR=FALSE
 
 GENERAL="
     --toolchain=msvc
     --prefix=$PREFIX
-    --arch=x86
+    --arch=${ARCH}
+#    --march=pentium4
 #    --cpu=opteron-sse3
-    --extra-cflags="-MD /IWindowsInclude"
+    --extra-cflags="-MD -IWindowsInclude"
 #    --extra-ldflags="-lz"
 #    --optflags=""
     --disable-programs
@@ -255,16 +260,19 @@ PARAMS="$(genelateparams GENERAL)\
 $(genelatelibparams)\
 $(echo -e "$(genelateparams AUDIO_DECODERS)")\
 $(echo -e "$(genelateparams VIDEO_DECODERS)")\
-$(echo -e "$(genelateparams AUDIO_ENCODERS)")\
-$(echo -e "$(genelateparams VIDEO_ENCODERS)")\
 $(echo -e "$(genelateparams BSFS)")\
 $(echo -e "$(genelateparams PARSERS)")\
 $(echo -e "$(genelateparams DEMUXERS)")\
-$(echo -e "$(genelateparams MUXERS)")\
 $(echo -e "$(genelateparams HARDWARE_ACCELS)")\
 $(echo -e "$(genelateparams INPUT_DEVICES)")\
 "
 params_dump PARAMS
+
+# these are not necessary
+# $(echo -e "$(genelateparams MUXERS)")
+# $(echo -e "$(genelateparams AUDIO_ENCODERS)")\
+# $(echo -e "$(genelateparams VIDEO_ENCODERS)")\
+
 
 echo "---- configure ----"
 ./configure $PARAMS
@@ -273,8 +281,6 @@ make clean
 echo "---- make install ----"
 make  -j4 install 2>&1 | tee build.log
 echo "---- rename and copy for ppsspp ----"
-echo "Copying inttypes.h into the build-directory."
-cp -af WindowsInclude/inttypes.h $PREFIX/include/libavutil/
 if (isstaticlib) then
     pushd $PREFIX/lib
     echo "Renaming "foo.a" to "foo.lib" in the build-directory."
