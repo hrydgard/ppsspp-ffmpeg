@@ -29,7 +29,6 @@ GENERAL="
     --arch=${ARCH}
 #    --march=pentium4
 #    --cpu=opteron-sse3
-    --extra-cflags="-MD -IWindowsInclude"
 #    --extra-ldflags="-lz"
 #    --optflags=""
     --disable-programs
@@ -275,11 +274,12 @@ params_dump PARAMS
 
 
 echo "---- configure ----"
-./configure $PARAMS
+./configure --extra-cflags="-MD -IWindowsInclude" $PARAMS
+
 echo "---- make clean ----"
 make clean
 echo "---- make install ----"
-make  -j4 install 2>&1 | tee build.log
+make install 2>&1 | tee build.log
 echo "---- rename and copy for ppsspp ----"
 if (isstaticlib) then
     pushd $PREFIX/lib
