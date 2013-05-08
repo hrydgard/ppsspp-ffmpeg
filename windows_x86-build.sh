@@ -289,17 +289,17 @@ else
     absbin=$(echo "${absbin//\//\\}" | sed -e "s/\\\\\(.\)/\1:/")
     pushd $libpath
     for fname in *.def; do
+        outname=${fname%%-*}
         if (isintobin) then
-            outname=${fname%%-*}
             abspath="$absbin\\$outname.lib"
             lib \/machine:i386 \/def:$fname \/out:$abspath
+            popd
+        	rm -fv $binpath/$outname.exp
+        	pushd $libpath
         else
             lib \/machine:i386 \/def:$fname \/out:$outname.lib
+            rm -fv $outname.exp
         fi
-        rm -fv $outname.exp
-        popd
-        rm -fv $binpath/$outname.{lib,exp}
-        pushd $libpath
     done
     popd
 fi
