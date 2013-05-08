@@ -31,11 +31,7 @@
 #define AVUTIL_COMMON_H
 
 #include <errno.h>
-#ifdef _MSC_VER
-#include "libavutil/inttypes.h"
-#else
 #include <inttypes.h>
-#endif
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
