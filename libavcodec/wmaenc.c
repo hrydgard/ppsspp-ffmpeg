@@ -19,13 +19,15 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/attributes.h"
 #include "avcodec.h"
 #include "internal.h"
 #include "wma.h"
 #include "libavutil/avassert.h"
 
 
-static int encode_init(AVCodecContext * avctx){
+static av_cold int encode_init(AVCodecContext *avctx)
+{
     WMACodecContext *s = avctx->priv_data;
     int i, flags1, flags2, block_align;
     uint8_t *extradata;
@@ -49,11 +51,6 @@ static int encode_init(AVCodecContext * avctx){
                avctx->bit_rate);
         return AVERROR(EINVAL);
     }
-
-#if FF_API_OLD_ENCODE_AUDIO
-    if (!(avctx->coded_frame = avcodec_alloc_frame()))
-        return AVERROR(ENOMEM);
-#endif
 
     /* extract flag infos */
     flags1 = 0;

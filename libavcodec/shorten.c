@@ -424,7 +424,7 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
         void *tmp_ptr;
         s->max_framesize = 8192; // should hopefully be enough for the first header
         tmp_ptr = av_fast_realloc(s->bitstream, &s->allocated_bitstream_size,
-                                  s->max_framesize);
+                                  s->max_framesize + FF_INPUT_BUFFER_PADDING_SIZE);
         if (!tmp_ptr) {
             av_log(avctx, AV_LOG_ERROR, "error allocating bitstream buffer\n");
             return AVERROR(ENOMEM);
@@ -596,10 +596,8 @@ static int shorten_decode_frame(AVCodecContext *avctx, void *data,
 
                 /* get output buffer */
                 frame->nb_samples = s->blocksize;
-                if ((ret = ff_get_buffer(avctx, frame)) < 0) {
-                    av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+                if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
                     return ret;
-                }
 
                 for (chan = 0; chan < s->channels; chan++) {
                     samples_u8  = ((uint8_t **)frame->extended_data)[chan];

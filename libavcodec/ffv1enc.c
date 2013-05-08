@@ -25,6 +25,7 @@
  * FF Video Codec 1 (a lossless codec) encoder
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/crc.h"
 #include "libavutil/opt.h"
@@ -534,7 +535,7 @@ static int write_extradata(FFV1Context *f)
     put_symbol(c, state, f->version, 0);
     if (f->version > 2) {
         if (f->version == 3)
-            f->minor_version = 2;
+            f->minor_version = 3;
         put_symbol(c, state, f->minor_version, 0);
     }
 
@@ -575,6 +576,7 @@ static int write_extradata(FFV1Context *f)
 
     if (f->version > 2) {
         put_symbol(c, state, f->ec, 0);
+        put_symbol(c, state, f->intra = (f->avctx->gop_size < 2), 0);
     }
 
     f->avctx->extradata_size = ff_rac_terminate(c);
@@ -646,7 +648,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
     if ((avctx->flags & (CODEC_FLAG_PASS1|CODEC_FLAG_PASS2)) || avctx->slices>1)
         s->version = FFMAX(s->version, 2);
 
-    if (avctx->level == 3) {
+    if (avctx->level == 3 || (s->version==2 && avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL)) {
         s->version = 3;
     }
 

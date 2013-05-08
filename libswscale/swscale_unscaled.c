@@ -321,19 +321,23 @@ static int packed_16bpc_bswap(SwsContext *c, const uint8_t *src[],
                               int srcStride[], int srcSliceY, int srcSliceH,
                               uint8_t *dst[], int dstStride[])
 {
-    int i, j;
-    int srcstr = srcStride[0] >> 1;
-    int dststr = dstStride[0] >> 1;
-    uint16_t       *dstPtr =       (uint16_t *) dst[0];
-    const uint16_t *srcPtr = (const uint16_t *) src[0];
-    int min_stride         = FFMIN(srcstr, dststr);
+    int i, j, p;
 
-    for (i = 0; i < srcSliceH; i++) {
-        for (j = 0; j < min_stride; j++) {
-            dstPtr[j] = av_bswap16(srcPtr[j]);
+    for (p = 0; p < 4; p++) {
+        int srcstr = srcStride[p] >> 1;
+        int dststr = dstStride[p] >> 1;
+        uint16_t       *dstPtr =       (uint16_t *) dst[p];
+        const uint16_t *srcPtr = (const uint16_t *) src[p];
+        int min_stride         = FFMIN(srcstr, dststr);
+        if(!dstPtr || !srcPtr)
+            continue;
+        for (i = 0; i < (srcSliceH >> c->chrDstVSubSample); i++) {
+            for (j = 0; j < min_stride; j++) {
+                dstPtr[j] = av_bswap16(srcPtr[j]);
+            }
+            srcPtr += srcstr;
+            dstPtr += dststr;
         }
-        srcPtr += srcstr;
-        dstPtr += dststr;
     }
 
     return srcSliceH;
@@ -488,6 +492,22 @@ static int planarRgbToRgbWrapper(SwsContext *c, const uint8_t *src[],
     return srcSliceH;
 }
 
+static int planarRgbToplanarRgbWrapper(SwsContext *c, const uint8_t *src[],
+                                       int srcStride[], int srcSliceY, int srcSliceH,
+                                       uint8_t *dst[], int dstStride[])
+{
+    copyPlane(src[0], srcStride[0], srcSliceY, srcSliceH, c->srcW,
+              dst[0], dstStride[0]);
+    copyPlane(src[1], srcStride[1], srcSliceY, srcSliceH, c->srcW,
+              dst[1], dstStride[1]);
+    copyPlane(src[2], srcStride[2], srcSliceY, srcSliceH, c->srcW,
+              dst[2], dstStride[2]);
+    if (dst[3])
+        fillPlane(dst[3], dstStride[3], c->srcW, srcSliceH, srcSliceY, 255);
+
+    return srcSliceH;
+}
+
 static void packedtogbr24p(const uint8_t *src, int srcStride,
                            uint8_t *dst[], int dstStride[], int srcSliceH,
                            int alpha_first, int inc_size, int width)
@@ -532,23 +552,23 @@ static int rgbToPlanarRgbWrapper(SwsContext *c, const uint8_t *src[],
                           dst[1] + srcSliceY * dstStride[1] };
 
     switch (c->srcFormat) {
-    case PIX_FMT_RGB24:
+    case AV_PIX_FMT_RGB24:
         packedtogbr24p((const uint8_t *) src[0], srcStride[0], dst201,
                        stride201, srcSliceH, alpha_first, 3, c->srcW);
         break;
-    case PIX_FMT_BGR24:
+    case AV_PIX_FMT_BGR24:
         packedtogbr24p((const uint8_t *) src[0], srcStride[0], dst102,
                        stride102, srcSliceH, alpha_first, 3, c->srcW);
         break;
-    case PIX_FMT_ARGB:
+    case AV_PIX_FMT_ARGB:
         alpha_first = 1;
-    case PIX_FMT_RGBA:
+    case AV_PIX_FMT_RGBA:
         packedtogbr24p((const uint8_t *) src[0], srcStride[0], dst201,
                        stride201, srcSliceH, alpha_first, 4, c->srcW);
         break;
-    case PIX_FMT_ABGR:
+    case AV_PIX_FMT_ABGR:
         alpha_first = 1;
-    case PIX_FMT_BGRA:
+    case AV_PIX_FMT_BGRA:
         packedtogbr24p((const uint8_t *) src[0], srcStride[0], dst102,
                        stride102, srcSliceH, alpha_first, 4, c->srcW);
         break;
@@ -746,13 +766,14 @@ static int bgr24ToYv12Wrapper(SwsContext *c, const uint8_t *src[],
                               int srcStride[], int srcSliceY, int srcSliceH,
                               uint8_t *dst[], int dstStride[])
 {
-    rgb24toyv12(
+    ff_rgb24toyv12(
         src[0],
         dst[0] +  srcSliceY       * dstStride[0],
         dst[1] + (srcSliceY >> 1) * dstStride[1],
         dst[2] + (srcSliceY >> 1) * dstStride[2],
         c->srcW, srcSliceH,
-        dstStride[0], dstStride[1], srcStride[0]);
+        dstStride[0], dstStride[1], srcStride[0],
+        c->input_rgb2yuv_table);
     if (dst[3])
         fillPlane(dst[3], dstStride[3], c->srcW, srcSliceH, srcSliceY, 255);
     return srcSliceH;
@@ -1034,6 +1055,10 @@ void ff_get_unscaled_swscale(SwsContext *c)
         && (!needsDither || (c->flags&(SWS_FAST_BILINEAR|SWS_POINT))))
         c->swScale= rgbToRgbWrapper;
 
+    if ((srcFormat == AV_PIX_FMT_GBRP && dstFormat == AV_PIX_FMT_GBRAP) ||
+        (srcFormat == AV_PIX_FMT_GBRAP && dstFormat == AV_PIX_FMT_GBRP))
+        c->swScale = planarRgbToplanarRgbWrapper;
+
 #define isByteRGB(f) (             \
         f == AV_PIX_FMT_RGB32   || \
         f == AV_PIX_FMT_RGB32_1 || \
@@ -1056,11 +1081,33 @@ void ff_get_unscaled_swscale(SwsContext *c)
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_BGR555) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_BGR565) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GRAY16) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GBRP9)  ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GBRP10) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GBRP12) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GBRP14) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GBRP16) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_GBRAP16) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_RGB444) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_RGB48)  ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_RGBA64) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_RGB555) ||
-        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_RGB565))
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_RGB565) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_XYZ12)  ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV420P9)  ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV420P10) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV420P12) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV420P14) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV420P16) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV422P9)  ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV422P10) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV422P12) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV422P14) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV422P16) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV444P9)  ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV444P10) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV444P12) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV444P14) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, AV_PIX_FMT_YUV444P16))
         c->swScale = packed_16bpc_bswap;
 
     if (usePal(srcFormat) && isByteRGB(dstFormat))

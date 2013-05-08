@@ -27,12 +27,14 @@
 
 #define UNCHECKED_BITSTREAM_READER 1
 
+#include "libavutil/attributes.h"
 #include "parser.h"
 #include "h264data.h"
 #include "golomb.h"
+#include "internal.h"
 
 
-static int ff_h264_find_frame_end(H264Context *h, const uint8_t *buf, int buf_size)
+static int h264_find_frame_end(H264Context *h, const uint8_t *buf, int buf_size)
 {
     int i, j;
     uint32_t state;
@@ -176,7 +178,7 @@ static inline int parse_nal_units(AVCodecParserContext *s,
             }
             src_length = nalsize;
         } else {
-        buf = avpriv_mpv_find_start_code(buf, buf_end, &state);
+        buf = avpriv_find_start_code(buf, buf_end, &state);
         if(buf >= buf_end)
             break;
         --buf;
@@ -312,7 +314,7 @@ static int h264_parse(AVCodecParserContext *s,
     if(s->flags & PARSER_FLAG_COMPLETE_FRAMES){
         next= buf_size;
     }else{
-        next= ff_h264_find_frame_end(h, buf, buf_size);
+        next = h264_find_frame_end(h, buf, buf_size);
 
         if (ff_combine_frame(pc, next, &buf, &buf_size) < 0) {
             *poutbuf = NULL;
@@ -322,7 +324,7 @@ static int h264_parse(AVCodecParserContext *s,
 
         if(next<0 && next != END_NOT_FOUND){
             av_assert1(pc->last_index + next >= 0 );
-            ff_h264_find_frame_end(h, &pc->buffer[pc->last_index + next], -next); //update state
+            h264_find_frame_end(h, &pc->buffer[pc->last_index + next], -next); // update state
         }
     }
 
@@ -380,7 +382,7 @@ static void close(AVCodecParserContext *s)
     ff_h264_free_context(h);
 }
 
-static int init(AVCodecParserContext *s)
+static av_cold int init(AVCodecParserContext *s)
 {
     H264Context *h = s->priv_data;
     h->thread_context[0] = h;

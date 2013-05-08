@@ -60,19 +60,18 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *cur_buf)
+static int filter_frame(AVFilterLink *inlink, AVFrame *cur_buf)
 {
     AlphaExtractContext *extract = inlink->dst->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
-    AVFilterBufferRef *out_buf =
-        ff_get_video_buffer(outlink, AV_PERM_WRITE, outlink->w, outlink->h);
+    AVFrame *out_buf = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     int ret;
 
     if (!out_buf) {
         ret = AVERROR(ENOMEM);
         goto end;
     }
-    avfilter_copy_buffer_ref_props(out_buf, cur_buf);
+    av_frame_copy_props(out_buf, cur_buf);
 
     if (extract->is_packed_rgb) {
         int x, y;
@@ -87,19 +86,18 @@ static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *cur_buf)
             }
         }
     } else {
-        const int linesize = abs(FFMIN(out_buf->linesize[Y], cur_buf->linesize[A]));
         int y;
         for (y = 0; y < outlink->h; y++) {
             memcpy(out_buf->data[Y] + y * out_buf->linesize[Y],
                    cur_buf->data[A] + y * cur_buf->linesize[A],
-                   linesize);
+                   outlink->w);
         }
     }
 
     ret = ff_filter_frame(outlink, out_buf);
 
 end:
-    avfilter_unref_buffer(cur_buf);
+    av_frame_free(&cur_buf);
     return ret;
 }
 
@@ -109,7 +107,6 @@ static const AVFilterPad alphaextract_inputs[] = {
         .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = config_input,
         .filter_frame = filter_frame,
-        .min_perms    = AV_PERM_READ,
     },
     { NULL }
 };

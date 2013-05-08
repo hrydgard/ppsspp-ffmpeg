@@ -34,11 +34,11 @@
 #include "avcodec.h"
 #include "internal.h"
 #include "get_bits.h"
-#include "put_bits.h"
 #include "rangecoder.h"
 #include "golomb.h"
 #include "mathops.h"
 #include "ffv1.h"
+#include "thread.h"
 
 static inline av_flatten int get_symbol_inline(RangeCoder *c, uint8_t *state,
                                                int is_signed)
@@ -306,16 +306,16 @@ static int decode_slice_header(FFV1Context *f, FFV1Context *fs)
 
     ps = get_symbol(c, state, 0);
     if (ps == 1) {
-        f->picture.interlaced_frame = 1;
-        f->picture.top_field_first  = 1;
+        f->cur->interlaced_frame = 1;
+        f->cur->top_field_first  = 1;
     } else if (ps == 2) {
-        f->picture.interlaced_frame = 1;
-        f->picture.top_field_first  = 0;
+        f->cur->interlaced_frame = 1;
+        f->cur->top_field_first  = 0;
     } else if (ps == 3) {
-        f->picture.interlaced_frame = 0;
+        f->cur->interlaced_frame = 0;
     }
-    f->picture.sample_aspect_ratio.num = get_symbol(c, state, 0);
-    f->picture.sample_aspect_ratio.den = get_symbol(c, state, 0);
+    f->cur->sample_aspect_ratio.num = get_symbol(c, state, 0);
+    f->cur->sample_aspect_ratio.den = get_symbol(c, state, 0);
 
     return 0;
 }
@@ -326,7 +326,7 @@ static int decode_slice(AVCodecContext *c, void *arg)
     FFV1Context *f    = fs->avctx->priv_data;
     int width, height, x, y, ret;
     const int ps      = av_pix_fmt_desc_get(c->pix_fmt)->comp[0].step_minus1 + 1;
-    AVFrame * const p = &f->picture;
+    AVFrame * const p = f->cur;
 
     if (f->version > 2) {
         if (ffv1_init_slice_state(f, fs) < 0)
@@ -338,7 +338,7 @@ static int decode_slice(AVCodecContext *c, void *arg)
     }
     if ((ret = ffv1_init_slice_state(f, fs)) < 0)
         return ret;
-    if (f->picture.key_frame)
+    if (f->cur->key_frame)
         ffv1_clear_slice_state(f, fs);
 
     width  = fs->slice_width;
@@ -499,6 +499,8 @@ static int read_extra_header(FFV1Context *f)
 
     if (f->version > 2) {
         f->ec = get_symbol(c, state, 0);
+        if (f->minor_version > 2)
+            f->intra = get_symbol(c, state, 0);
     }
 
     if (f->version > 2) {
@@ -732,16 +734,14 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPac
     int buf_size        = avpkt->size;
     FFV1Context *f      = avctx->priv_data;
     RangeCoder *const c = &f->slice_context[0]->c;
-    AVFrame *const p    = &f->picture;
+    ThreadFrame frame = { .f = data };
     int i, ret;
     uint8_t keystate = 128;
     const uint8_t *buf_p;
+    AVFrame *const p    = data;
 
-    AVFrame *picture = data;
-
-    /* release previously stored data */
-    if (p->data[0])
-        avctx->release_buffer(avctx, p);
+    f->cur = p;
+    f->avctx = avctx;
 
     ff_init_range_decoder(c, buf, buf_size);
     ff_build_rac_states(c, 0.05 * (1LL << 32), 256 - 8);
@@ -762,11 +762,8 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPac
         p->key_frame = 0;
     }
 
-    p->reference = 3; //for error concealment
-    if ((ret = ff_get_buffer(avctx, p)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((ret = ff_thread_get_buffer(avctx, &frame, AV_GET_BUFFER_FLAG_REF)) < 0)
         return ret;
-    }
 
     if (avctx->debug & FF_DEBUG_PICT_INFO)
         av_log(avctx, AV_LOG_DEBUG, "ver:%d keyframe:%d coder:%d ec:%d slices:%d bps:%d\n",
@@ -806,6 +803,9 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPac
             ff_init_range_decoder(&fs->c, buf_p, v);
         } else
             fs->c.bytestream_end = (uint8_t *)(buf_p + v);
+
+        fs->avctx = avctx;
+        fs->cur = p;
     }
 
     avctx->execute(avctx,
@@ -824,14 +824,12 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPac
             for (j = 0; j < 4; j++) {
                 int sh = (j==1 || j==2) ? f->chroma_h_shift : 0;
                 int sv = (j==1 || j==2) ? f->chroma_v_shift : 0;
-                dst[j] = f->picture     .data[j] + f->picture     .linesize[j]*
+                dst[j] = p->data[j] + p->linesize[j]*
                          (fs->slice_y>>sv) + (fs->slice_x>>sh);
                 src[j] = f->last_picture.data[j] + f->last_picture.linesize[j]*
                          (fs->slice_y>>sv) + (fs->slice_x>>sh);
             }
-            av_image_copy(dst,
-                          f->picture.linesize,
-                          (const uint8_t **)src,
+            av_image_copy(dst, p->linesize, (const uint8_t **)src,
                           f->last_picture.linesize,
                           avctx->pix_fmt,
                           fs->slice_width,
@@ -841,12 +839,32 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPac
 
     f->picture_number++;
 
-    *picture   = *p;
+    av_frame_unref(&f->last_picture);
+    if ((ret = av_frame_ref(&f->last_picture, p)) < 0)
+        return ret;
+    f->cur = NULL;
+
     *got_frame = 1;
 
-    FFSWAP(AVFrame, f->picture, f->last_picture);
-
     return buf_size;
+}
+
+static int init_thread_copy(AVCodecContext *avctx)
+{
+    FFV1Context *f = avctx->priv_data;
+    int ret, i;
+
+    for (i = 0; i < f->quant_table_count; i++) {
+        void *p = f->initial_states[i];
+        f->initial_states[i] = av_malloc(f->context_count[i] * sizeof(*f->initial_states[i]));
+        if (!f->initial_states[i])
+            return AVERROR(ENOMEM);
+        memcpy(f->initial_states[i], p, f->context_count[i] * sizeof(*f->initial_states[i]));
+    }
+
+    if ((ret = ffv1_init_slice_contexts(f)) < 0)
+        return ret;
+    return 0;
 }
 
 AVCodec ff_ffv1_decoder = {
@@ -857,6 +875,7 @@ AVCodec ff_ffv1_decoder = {
     .init           = decode_init,
     .close          = ffv1_close,
     .decode         = decode_frame,
+    .init_thread_copy = init_thread_copy,
     .capabilities   = CODEC_CAP_DR1 /*| CODEC_CAP_DRAW_HORIZ_BAND*/ |
                       CODEC_CAP_SLICE_THREADS,
     .long_name      = NULL_IF_CONFIG_SMALL("FFmpeg video codec #1"),

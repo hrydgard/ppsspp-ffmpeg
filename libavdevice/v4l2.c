@@ -46,6 +46,7 @@
 #endif
 #include <linux/videodev2.h>
 #endif
+#include "libavutil/atomic.h"
 #include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/log.h"
@@ -54,6 +55,7 @@
 #include "timefilter.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/time.h"
 #include "libavutil/avstring.h"
 
 #if CONFIG_LIBV4L2
@@ -109,9 +111,9 @@ struct video_data {
     int64_t last_time_m;
 
     int buffers;
+    volatile int buffers_queued;
     void **buf_start;
     unsigned int *buf_len;
-    int *buf_dequeued;
     char *standard;
     v4l2_std_id std_id;
     int channel;
@@ -122,9 +124,8 @@ struct video_data {
 };
 
 struct buff_data {
+    struct video_data *s;
     int index;
-    int fd;
-    int *buf_dequeued;
 };
 
 struct fmt_map {
@@ -322,7 +323,7 @@ static void list_framesizes(AVFormatContext *ctx, int fd, uint32_t pixelformat)
 {
     struct v4l2_frmsizeenum vfse = { .pixel_format = pixelformat };
 
-    while(!ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &vfse)) {
+    while(!v4l2_ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &vfse)) {
         switch (vfse.type) {
         case V4L2_FRMSIZE_TYPE_DISCRETE:
             av_log(ctx, AV_LOG_INFO, " %ux%u",
@@ -347,7 +348,7 @@ static void list_formats(AVFormatContext *ctx, int fd, int type)
 {
     struct v4l2_fmtdesc vfd = { .type = V4L2_BUF_TYPE_VIDEO_CAPTURE };
 
-    while(!ioctl(fd, VIDIOC_ENUM_FMT, &vfd)) {
+    while(!v4l2_ioctl(fd, VIDIOC_ENUM_FMT, &vfd)) {
         enum AVCodecID codec_id = fmt_v4l2codec(vfd.pixelformat);
         enum AVPixelFormat pix_fmt = fmt_v4l2ff(vfd.pixelformat, codec_id);
 
@@ -370,10 +371,8 @@ static void list_formats(AVFormatContext *ctx, int fd, int type)
         }
 
 #ifdef V4L2_FMT_FLAG_EMULATED
-        if (vfd.flags & V4L2_FMT_FLAG_EMULATED) {
-            av_log(ctx, AV_LOG_WARNING, "%s", "Emulated");
-            continue;
-        }
+        if (vfd.flags & V4L2_FMT_FLAG_EMULATED)
+            av_log(ctx, AV_LOG_INFO, " Emulated :");
 #endif
 #if HAVE_STRUCT_V4L2_FRMIVALENUM_DISCRETE
         list_framesizes(ctx, fd, vfd.pixelformat);
@@ -438,11 +437,6 @@ static int mmap_init(AVFormatContext *ctx)
         av_free(s->buf_start);
         return AVERROR(ENOMEM);
     }
-    s->buf_dequeued = av_mallocz(sizeof(int) * s->buffers);
-    if (s->buf_dequeued == NULL) {
-        av_log(ctx, AV_LOG_ERROR, "Cannot allocate buffer array\n");
-        return AVERROR(ENOMEM);
-    }
 
     for (i = 0; i < req.count; i++) {
         struct v4l2_buffer buf = {
@@ -477,40 +471,32 @@ static int mmap_init(AVFormatContext *ctx)
     return 0;
 }
 
-static int enqueue_buffer(int fd, int index)
+#if FF_API_DESTRUCT_PACKET
+static void dummy_release_buffer(AVPacket *pkt)
 {
-    int res;
-    struct v4l2_buffer buf = { 0 };
-
-    buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    buf.memory = V4L2_MEMORY_MMAP;
-    buf.index  = index;
-
-    if (v4l2_ioctl(fd, VIDIOC_QBUF, &buf) < 0) {
-        res = AVERROR(errno);
-        av_log(NULL, AV_LOG_ERROR, "ioctl(VIDIOC_QBUF): %s\n", av_err2str(res));
-        return res;
-    }
-    return 0;
+    av_assert0(0);
 }
+#endif
 
-static void mmap_release_buffer(AVPacket *pkt)
+static void mmap_release_buffer(void *opaque, uint8_t *data)
 {
-    struct buff_data *buf_descriptor = pkt->priv;
+    struct v4l2_buffer buf = { 0 };
+    int res;
+    struct buff_data *buf_descriptor = opaque;
+    struct video_data *s = buf_descriptor->s;
 
-    if (pkt->data == NULL)
-        return;
-
-    if (buf_descriptor->index == -1) {
-        av_free(pkt->data);
-    } else {
-        if (!enqueue_buffer(buf_descriptor->fd, buf_descriptor->index))
-            buf_descriptor->buf_dequeued[buf_descriptor->index] = 0;
-    }
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_MMAP;
+    buf.index = buf_descriptor->index;
     av_free(buf_descriptor);
 
-    pkt->data = NULL;
-    pkt->size = 0;
+    if (v4l2_ioctl(s->fd, VIDIOC_QBUF, &buf) < 0) {
+        res = AVERROR(errno);
+        av_log(NULL, AV_LOG_ERROR, "ioctl(VIDIOC_QBUF): %s\n",
+               av_err2str(res));
+    }
+
+    avpriv_atomic_int_add_and_fetch(&s->buffers_queued, 1);
 }
 
 #if HAVE_CLOCK_GETTIME && defined(CLOCK_MONOTONIC)
@@ -539,8 +525,8 @@ static int init_convert_timestamp(AVFormatContext *ctx, int64_t ts)
     now = av_gettime_monotonic();
     if (s->ts_mode == V4L_TS_MONO2ABS ||
         (ts <= now + 1 * AV_TIME_BASE && ts >= now - 10 * AV_TIME_BASE)) {
-        int64_t period = av_rescale_q(1, AV_TIME_BASE_Q,
-                                      ctx->streams[0]->avg_frame_rate);
+        AVRational tb = {AV_TIME_BASE, 1};
+        int64_t period = av_rescale_q(1, tb, ctx->streams[0]->avg_frame_rate);
         av_log(ctx, AV_LOG_INFO, "Detected monotonic timestamps, converting\n");
         /* microseconds instead of seconds, MHz instead of Hz */
         s->timefilter = ff_timefilter_new(1, period, 1.0E-6);
@@ -580,14 +566,15 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
         .type   = V4L2_BUF_TYPE_VIDEO_CAPTURE,
         .memory = V4L2_MEMORY_MMAP
     };
-    struct buff_data *buf_descriptor;
-    int res, i, free_buffers;
+    int res;
 
     /* FIXME: Some special treatment might be needed in case of loss of signal... */
     while ((res = v4l2_ioctl(s->fd, VIDIOC_DQBUF, &buf)) < 0 && (errno == EINTR));
     if (res < 0) {
-        if (errno == EAGAIN)
+        if (errno == EAGAIN) {
+            pkt->size = 0;
             return AVERROR(EAGAIN);
+        }
         res = AVERROR(errno);
         av_log(ctx, AV_LOG_ERROR, "ioctl(VIDIOC_DQBUF): %s\n", av_err2str(res));
         return res;
@@ -597,6 +584,9 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
         av_log(ctx, AV_LOG_ERROR, "Invalid buffer index received.\n");
         return AVERROR(EINVAL);
     }
+    avpriv_atomic_int_add_and_fetch(&s->buffers_queued, -1);
+    // always keep at least one buffer queued
+    av_assert0(avpriv_atomic_int_get(&s->buffers_queued) >= 1);
 
     /* CPIA is a compressed format and we don't know the exact number of bytes
      * used by a frame, so set it here as the driver announces it.
@@ -608,50 +598,63 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
         av_log(ctx, AV_LOG_ERROR,
                "The v4l2 frame is %d bytes, but %d bytes are expected\n",
                buf.bytesused, s->frame_size);
-        enqueue_buffer(s->fd, buf.index);
         return AVERROR_INVALIDDATA;
     }
 
-    buf_descriptor = av_malloc(sizeof(struct buff_data));
-    if (buf_descriptor == NULL) {
-        /* Something went wrong... Since av_malloc() failed, we cannot even
-         * allocate a buffer for memcopying into it
-         */
-        av_log(ctx, AV_LOG_ERROR, "Failed to allocate a buffer descriptor\n");
-        res = v4l2_ioctl(s->fd, VIDIOC_QBUF, &buf);
-        return AVERROR(ENOMEM);
-    }
-    buf_descriptor->fd = s->fd;
-    buf_descriptor->buf_dequeued = s->buf_dequeued;
-
-    free_buffers = -1; /* start from -1 because we just dequeued a buffer */
-    for (i = 0; i < s->buffers; i++)
-        if (s->buf_dequeued[i] == 0)
-            free_buffers++;
-
-    if (free_buffers == 0) {
-        if ((res = av_new_packet(pkt, buf.bytesused)) < 0) {
-            enqueue_buffer(s->fd, buf.index);
+    /* Image is at s->buff_start[buf.index] */
+    if (avpriv_atomic_int_get(&s->buffers_queued) == FFMAX(s->buffers / 8, 1)) {
+        /* when we start getting low on queued buffers, fall back on copying data */
+        res = av_new_packet(pkt, buf.bytesused);
+        if (res < 0) {
+            av_log(ctx, AV_LOG_ERROR, "Error allocating a packet.\n");
+            if (v4l2_ioctl(s->fd, VIDIOC_QBUF, &buf) == 0)
+                avpriv_atomic_int_add_and_fetch(&s->buffers_queued, 1);
             return res;
         }
         memcpy(pkt->data, s->buf_start[buf.index], buf.bytesused);
-        enqueue_buffer(s->fd, buf.index);
-        buf_descriptor->index = -1;
+
+        if (v4l2_ioctl(s->fd, VIDIOC_QBUF, &buf) < 0) {
+            res = AVERROR(errno);
+            av_log(ctx, AV_LOG_ERROR, "ioctl(VIDIOC_QBUF): %s\n", av_err2str(res));
+            av_free_packet(pkt);
+            return res;
+        }
+        avpriv_atomic_int_add_and_fetch(&s->buffers_queued, 1);
     } else {
-        /* Image is at s->buff_start[buf.index] */
-        pkt->data = s->buf_start[buf.index];
+        struct buff_data *buf_descriptor;
+
+        pkt->data     = s->buf_start[buf.index];
+        pkt->size     = buf.bytesused;
+#if FF_API_DESTRUCT_PACKET
+        pkt->destruct = dummy_release_buffer;
+#endif
+
+        buf_descriptor = av_malloc(sizeof(struct buff_data));
+        if (buf_descriptor == NULL) {
+            /* Something went wrong... Since av_malloc() failed, we cannot even
+             * allocate a buffer for memcpying into it
+             */
+            av_log(ctx, AV_LOG_ERROR, "Failed to allocate a buffer descriptor\n");
+            if (v4l2_ioctl(s->fd, VIDIOC_QBUF, &buf) == 0)
+                avpriv_atomic_int_add_and_fetch(&s->buffers_queued, 1);
+
+            return AVERROR(ENOMEM);
+        }
         buf_descriptor->index = buf.index;
-        buf_descriptor->buf_dequeued[buf.index] = 1;
+        buf_descriptor->s     = s;
+
+        pkt->buf = av_buffer_create(pkt->data, pkt->size, mmap_release_buffer,
+                                    buf_descriptor, 0);
+        if (!pkt->buf) {
+            av_log(ctx, AV_LOG_ERROR, "Failed to create a buffer\n");
+            if (v4l2_ioctl(s->fd, VIDIOC_QBUF, &buf) == 0)
+                avpriv_atomic_int_add_and_fetch(&s->buffers_queued, 1);
+            av_freep(&buf_descriptor);
+            return AVERROR(ENOMEM);
+        }
     }
-    pkt->size = buf.bytesused;
-    pkt->priv = buf_descriptor;
-    pkt->destruct = mmap_release_buffer;
     pkt->pts = buf.timestamp.tv_sec * INT64_C(1000000) + buf.timestamp.tv_usec;
-    res = convert_timestamp(ctx, &pkt->pts);
-    if (res < 0) {
-        mmap_release_buffer(pkt);
-        return res;
-    }
+    convert_timestamp(ctx, &pkt->pts);
 
     return s->buf_len[buf.index];
 }
@@ -675,6 +678,7 @@ static int mmap_start(AVFormatContext *ctx)
             return res;
         }
     }
+    s->buffers_queued = s->buffers;
 
     type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if (v4l2_ioctl(s->fd, VIDIOC_STREAMON, &type) < 0) {
@@ -701,7 +705,6 @@ static void mmap_close(struct video_data *s)
     }
     av_free(s->buf_start);
     av_free(s->buf_len);
-    av_free(s->buf_dequeued);
 }
 
 static int v4l2_set_parameters(AVFormatContext *s1)
@@ -879,18 +882,34 @@ static int v4l2_read_header(AVFormatContext *s1)
     if (!st)
         return AVERROR(ENOMEM);
 
+#if CONFIG_LIBV4L2
+    /* silence libv4l2 logging. if fopen() fails v4l2_log_file will be NULL
+       and errors will get sent to stderr */
+    v4l2_log_file = fopen("/dev/null", "w");
+#endif
+
     s->fd = device_open(s1);
     if (s->fd < 0)
         return s->fd;
 
-    /* set tv video input */
-    av_log(s1, AV_LOG_DEBUG, "Selecting input_channel: %d\n", s->channel);
-    if (v4l2_ioctl(s->fd, VIDIOC_S_INPUT, &s->channel) < 0) {
-        res = AVERROR(errno);
-        av_log(s1, AV_LOG_ERROR, "ioctl(VIDIOC_S_INPUT): %s\n", av_err2str(res));
-        return res;
+    if (s->channel != -1) {
+        /* set video input */
+        av_log(s1, AV_LOG_DEBUG, "Selecting input_channel: %d\n", s->channel);
+        if (v4l2_ioctl(s->fd, VIDIOC_S_INPUT, &s->channel) < 0) {
+            res = AVERROR(errno);
+            av_log(s1, AV_LOG_ERROR, "ioctl(VIDIOC_S_INPUT): %s\n", av_err2str(res));
+            return res;
+        }
+    } else {
+        /* get current video input */
+        if (v4l2_ioctl(s->fd, VIDIOC_G_INPUT, &s->channel) < 0) {
+            res = AVERROR(errno);
+            av_log(s1, AV_LOG_ERROR, "ioctl(VIDIOC_G_INPUT): %s\n", av_err2str(res));
+            return res;
+        }
     }
 
+    /* enum input */
     input.index = s->channel;
     if (v4l2_ioctl(s->fd, VIDIOC_ENUMINPUT, &input) < 0) {
         res = AVERROR(errno);
@@ -898,7 +917,7 @@ static int v4l2_read_header(AVFormatContext *s1)
         return res;
     }
     s->std_id = input.std;
-    av_log(s1, AV_LOG_DEBUG, "input_channel: %d, input_name: %s\n",
+    av_log(s1, AV_LOG_DEBUG, "Current input_channel: %d, input_name: %s\n",
            s->channel, input.name);
 
     if (s->list_format) {
@@ -930,11 +949,10 @@ static int v4l2_read_header(AVFormatContext *s1)
     }
 
     if (!s->width && !s->height) {
-        struct v4l2_format fmt;
+        struct v4l2_format fmt = { .type = V4L2_BUF_TYPE_VIDEO_CAPTURE };
 
         av_log(s1, AV_LOG_VERBOSE,
                "Querying the device for the current frame size\n");
-        fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         if (v4l2_ioctl(s->fd, VIDIOC_G_FMT, &fmt) < 0) {
             res = AVERROR(errno);
             av_log(s1, AV_LOG_ERROR, "ioctl(VIDIOC_G_FMT): %s\n", av_err2str(res));
@@ -1003,8 +1021,6 @@ static int v4l2_read_packet(AVFormatContext *s1, AVPacket *pkt)
     int res;
 
     av_init_packet(pkt);
-    pkt->data = NULL;
-    pkt->size = 0;
     if ((res = mmap_read_frame(s1, pkt)) < 0) {
         return res;
     }
@@ -1021,6 +1037,10 @@ static int v4l2_read_close(AVFormatContext *s1)
 {
     struct video_data *s = s1->priv_data;
 
+    if (avpriv_atomic_int_get(&s->buffers_queued) != s->buffers)
+        av_log(s1, AV_LOG_WARNING, "Some buffers are still owned by the caller on "
+               "close.\n");
+
     mmap_close(s);
 
     v4l2_close(s->fd);
@@ -1032,7 +1052,7 @@ static int v4l2_read_close(AVFormatContext *s1)
 
 static const AVOption options[] = {
     { "standard",     "set TV standard, used only by analog frame grabber",       OFFSET(standard),     AV_OPT_TYPE_STRING, {.str = NULL }, 0, 0,       DEC },
-    { "channel",      "set TV channel, used only by frame grabber",               OFFSET(channel),      AV_OPT_TYPE_INT,    {.i64 = 0 },    0, INT_MAX, DEC },
+    { "channel",      "set TV channel, used only by frame grabber",               OFFSET(channel),      AV_OPT_TYPE_INT,    {.i64 = -1 },  -1, INT_MAX, DEC },
     { "video_size",   "set frame size",                                           OFFSET(width),        AV_OPT_TYPE_IMAGE_SIZE, {.str = NULL},  0, 0,   DEC },
     { "pixel_format", "set preferred pixel format",                               OFFSET(pixel_format), AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       DEC },
     { "input_format", "set preferred pixel format (for raw video) or codec name", OFFSET(pixel_format), AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       DEC },

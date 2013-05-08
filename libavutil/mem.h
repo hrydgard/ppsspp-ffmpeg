@@ -180,6 +180,14 @@ av_alloc_size(1, 2) static inline void *av_mallocz_array(size_t nmemb, size_t si
 char *av_strdup(const char *s) av_malloc_attrib;
 
 /**
+ * Duplicate the buffer p.
+ * @param p buffer to be duplicated
+ * @return Pointer to a newly allocated buffer containing a
+ * copy of p or NULL if the buffer cannot be allocated.
+ */
+void *av_memdup(const void *p, size_t size);
+
+/**
  * Free a memory block which has been allocated with av_malloc(z)() or
  * av_realloc() and set the pointer pointing to it to NULL.
  * @param ptr Pointer to the pointer to the memory block which should
@@ -191,9 +199,22 @@ void av_freep(void *ptr);
 /**
  * Add an element to a dynamic array.
  *
- * @param tab_ptr Pointer to the array.
- * @param nb_ptr  Pointer to the number of elements in the array.
- * @param elem    Element to be added.
+ * The array to grow is supposed to be an array of pointers to
+ * structures, and the element to add must be a pointer to an already
+ * allocated structure.
+ *
+ * The array is reallocated when its sizes reaches powers of 2.
+ * Therefore, the amortized cost of adding an element is constant.
+ *
+ * In case of success, the pointer to the array is updated in order to
+ * point to the new grown array, and the number pointed to by nb_ptr
+ * is incremented.
+ * In case of failure, the array is freed, *tab_ptr is set to NULL and
+ * *nb_ptr is set to 0.
+ *
+ * @param tab_ptr pointer to the array to grow
+ * @param nb_ptr  pointer to the number of elements in the array
+ * @param elem    element to add
  */
 void av_dynarray_add(void *tab_ptr, int *nb_ptr, void *elem);
 

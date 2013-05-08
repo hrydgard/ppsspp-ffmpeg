@@ -30,6 +30,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "internal.h"
+#include "thread.h"
 #include "j2k.h"
 #include "libavutil/common.h"
 
@@ -49,7 +50,7 @@ typedef struct {
 
 typedef struct {
     AVCodecContext *avctx;
-    AVFrame picture;
+    AVFrame *picture;
     GetByteContext g;
 
     int width, height; ///< image width and height
@@ -205,6 +206,7 @@ static int tag_tree_decode(J2kDecoderContext *s, J2kTgtNode *node, int threshold
 static int get_siz(J2kDecoderContext *s)
 {
     int i, ret;
+    ThreadFrame frame = { .f = s->picture };
 
     if (bytestream2_get_bytes_left(&s->g) < 36)
         return AVERROR(EINVAL);
@@ -281,14 +283,12 @@ static int get_siz(J2kDecoderContext *s)
         break;
     }
 
-    if (s->picture.data[0])
-        s->avctx->release_buffer(s->avctx, &s->picture);
 
-    if ((ret = ff_get_buffer(s->avctx, &s->picture)) < 0)
+    if ((ret = ff_thread_get_buffer(s->avctx, &frame, 0)) < 0)
         return ret;
 
-    s->picture.pict_type = AV_PICTURE_TYPE_I;
-    s->picture.key_frame = 1;
+    s->picture->pict_type = AV_PICTURE_TYPE_I;
+    s->picture->key_frame = 1;
 
     return 0;
 }
@@ -859,7 +859,7 @@ static int decode_tile(J2kDecoderContext *s, J2kTile *tile)
     if (s->precision <= 8) {
         for (compno = 0; compno < s->ncomponents; compno++){
             y = tile->comp[compno].coord[1][0] - s->image_offset_y;
-            line = s->picture.data[0] + y * s->picture.linesize[0];
+            line = s->picture->data[0] + y * s->picture->linesize[0];
             for (; y < tile->comp[compno].coord[1][1] - s->image_offset_y; y += s->cdy[compno]){
                 uint8_t *dst;
 
@@ -875,13 +875,13 @@ static int decode_tile(J2kDecoderContext *s, J2kTile *tile)
                     *dst = *src[compno]++;
                     dst += s->ncomponents;
                 }
-                line += s->picture.linesize[0];
+                line += s->picture->linesize[0];
             }
         }
     } else {
         for (compno = 0; compno < s->ncomponents; compno++) {
             y = tile->comp[compno].coord[1][0] - s->image_offset_y;
-            line = s->picture.data[0] + y * s->picture.linesize[0];
+            line = s->picture->data[0] + y * s->picture->linesize[0];
             for (; y < tile->comp[compno].coord[1][1] - s->image_offset_y; y += s->cdy[compno]) {
                 uint16_t *dst;
 
@@ -896,7 +896,7 @@ static int decode_tile(J2kDecoderContext *s, J2kTile *tile)
                     *dst = val;
                     dst += s->ncomponents;
                 }
-                line += s->picture.linesize[0];
+                line += s->picture->linesize[0];
             }
         }
     }
@@ -1025,6 +1025,8 @@ static int decode_frame(AVCodecContext *avctx,
     AVFrame *picture = data;
     int tileno, ret;
 
+    s->picture = picture;
+
     bytestream2_init(&s->g, avpkt->data, avpkt->size);
     s->curtileno = -1;
 
@@ -1062,7 +1064,6 @@ static int decode_frame(AVCodecContext *avctx,
     cleanup(s);
 
     *got_frame = 1;
-    *picture = s->picture;
 
     return bytestream2_tell(&s->g);
 
@@ -1076,32 +1077,19 @@ static av_cold int j2kdec_init(AVCodecContext *avctx)
     J2kDecoderContext *s = avctx->priv_data;
 
     s->avctx = avctx;
-    avcodec_get_frame_defaults((AVFrame*)&s->picture);
-    avctx->coded_frame = (AVFrame*)&s->picture;
 
     ff_j2k_init_tier1_luts();
 
     return 0;
 }
 
-static av_cold int decode_end(AVCodecContext *avctx)
-{
-    J2kDecoderContext *s = avctx->priv_data;
-
-    if (s->picture.data[0])
-        avctx->release_buffer(avctx, &s->picture);
-
-    return 0;
-}
-
-AVCodec ff_jpeg2000_decoder = {
+AVCodec ff_j2k_decoder = {
     .name           = "j2k",
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_JPEG2000,
     .priv_data_size = sizeof(J2kDecoderContext),
     .init           = j2kdec_init,
-    .close          = decode_end,
     .decode         = decode_frame,
-    .capabilities   = CODEC_CAP_EXPERIMENTAL,
+    .capabilities   = CODEC_CAP_EXPERIMENTAL | CODEC_CAP_FRAME_THREADS,
     .long_name      = NULL_IF_CONFIG_SMALL("JPEG 2000"),
 };
