@@ -23,10 +23,6 @@
  * common internal and external API header
  */
 
-#ifndef UINT64_C
-#define UINT64_C(value)__CONCAT(value,ULL)
-#endif
-
 #ifndef AVUTIL_COMMON_H
 #define AVUTIL_COMMON_H
 
@@ -233,6 +229,23 @@ static av_always_inline av_const float av_clipf_c(float a, float amin, float ama
     else               return a;
 }
 
+/**
+ * Clip a double value into the amin-amax range.
+ * @param a value to clip
+ * @param amin minimum value of the clip range
+ * @param amax maximum value of the clip range
+ * @return clipped value
+ */
+static av_always_inline av_const double av_clipd_c(double a, double amin, double amax)
+{
+#if defined(HAVE_AV_CONFIG_H) && defined(ASSERT_LEVEL) && ASSERT_LEVEL >= 2
+    if (amin > amax) abort();
+#endif
+    if      (a < amin) return amin;
+    else if (a > amax) return amax;
+    else               return a;
+}
+
 /** Compute ceil(log2(x)).
  * @param x value used to compute ceil(log2(x))
  * @return computed ceiling of log2(x)
@@ -284,7 +297,7 @@ static av_always_inline av_const int av_popcount64_c(uint64_t x)
     val= GET_BYTE;\
     {\
         uint32_t top = (val & 128) >> 1;\
-        if ((val & 0xc0) == 0x80)\
+        if ((val & 0xc0) == 0x80 || val >= 0xFE)\
             ERROR\
         while (val & top) {\
             int tmp= GET_BYTE - 128;\
@@ -432,10 +445,12 @@ static av_always_inline av_const int av_popcount64_c(uint64_t x)
 #ifndef av_clipf
 #   define av_clipf         av_clipf_c
 #endif
+#ifndef av_clipd
+#   define av_clipd         av_clipd_c
+#endif
 #ifndef av_popcount
 #   define av_popcount      av_popcount_c
 #endif
 #ifndef av_popcount64
 #   define av_popcount64    av_popcount64_c
 #endif
-

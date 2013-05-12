@@ -19,6 +19,8 @@ lib*/*.a
 *-example
 *-test
 *_g
+*_converted.c
+*_preprocessed.c
 build.log
 /.config
 /.version

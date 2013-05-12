@@ -27,7 +27,6 @@ GENERAL="
     --toolchain=msvc
     --prefix=$PREFIX
     --arch=${ARCH}
-#    --march=pentium4
 #    --cpu=opteron-sse3
 #    --extra-ldflags="-lz"
 #    --optflags=""
@@ -35,62 +34,43 @@ GENERAL="
     --disable-avfilter
     --disable-postproc
     --disable-doc
-#    --enable-zlib
     --disable-pthreads
     --enable-w32threads
     --disable-network
     --disable-everything
+    --disable-encoders
+    --disable-muxers
+    --disable-hwaccels
+    --disable-parsers
+    --disable-protocols
     --enable-dxva2
-#    --enable-libmp3lame
-#     --enable-vaapi
-#    --enable-vda
-#    --enable-vdpau
 "
 
 AUDIO_DECODERS="
     --enable-decoder=aac
-#    --enable-decoder=aac_latm
-    --enable-decoder=atrac1
+    --enable-decoder=aac_latm
     --enable-decoder=atrac3
     --enable-decoder=mp3
-#    --enable-decoder=mp3adu
-#    --enable-decoder=mp3adufloat
-#    --enable-decoder=mp3float
-#    --enable-decoder=mp3on4
-#    --enable-decoder=mp3on4float
-#    --enable-decoder=libmp3lame
-#    --enable-decoder=wmav1
-#    --enable-decoder=wmav2
-#    --enable-decoder=wmavoice
     --enable-decoder=pcm_s16le
     --enable-decoder=pcm_s8
 "
 
 VIDEO_DECODERS="
     --enable-decoder=h264
-#    --enable-decoder=h264_crystalhd
-#    --enable-decoder=h264_vda
-#    --enable-decoder=h264_vdpau
-#    --enable-decoder=mpeg4
-#    --enable-decoder=mpeg4_crystalhd
-#    --enable-decoder=mpeg4_vdpau
+    --enable-decoder=mpeg4
     --enable-decoder=mpeg2video
-#    --enable-decoder=mpeg2_crystalhd
-#    --enable-decoder=mjpeg
-#    --enable-decoder=mjpegb
+    --enable-decoder=mjpeg
+    --enable-decoder=mjpegb
 "
 
+#unused
 AUDIO_ENCODERS="
     --enable-encoder=aac
-#    --enable-encoder=libfdk_aac
-#    --enable-encoder=libfaac
-#    --enable-encoder=libmp3lame
-#    --enable-encoder=wmav1
-#    --enable-encoder=wmav2
     --enable-encoder=pcm_s16le
     --enable-encoder=pcm_s8
 "
 
+#unused
 VIDEO_ENCODERS="
 #    --enable-encoder=libx264
 #    --enable-encoder=libx264rgb
@@ -111,17 +91,12 @@ HARDWARE_ACCELS="
 #    --enable-hwaccel=mpeg4_vdpau
 "
 
+#unused
 MUXERS="
     --enable-muxer=h264
     --enable-muxer=mp4
-#    --enable-muxer=m4v
-#    --enable-muxer=asf
-#    --enable-muxer=asf_stream
+    --enable-muxer=m4v
     --enable-muxer=avi
-#    --enable-muxer=mpjpeg
-#    --enable-muxer=mjpeg
-#    --enable-muxer=adts
-#    --enable-muxer=latm
     --enable-muxer=mp3
     --enable-muxer=psp
     --enable-muxer=oma
@@ -133,15 +108,14 @@ MUXERS="
 
 DEMUXERS="
     --enable-demuxer=h264
-#    --enable-demuxer=m4v
+    --enable-demuxer=m4v
     --enable-demuxer=mpegvideo
-#    --enable-demuxer=mjpeg
-#    --enable-demuxer=asf
+    --enable-demuxer=mpegps
+    --enable-demuxer=mjpeg
     --enable-demuxer=avi
     --enable-demuxer=aac
-#    --enable-demuxer=latm
+    --enable-demuxer=pmp
     --enable-demuxer=oma
-#    --enable-demuxer=xwma
     --enable-demuxer=pcm_s16le
     --enable-demuxer=pcm_s8
     --enable-demuxer=wav
@@ -150,11 +124,11 @@ DEMUXERS="
 PARSERS="
     --enable-parser=h264
     --enable-parser=mpeg4video
-    --enable-parser=mpegvideo
-#    --enable-parser=mjpeg
-    --enable-parser=aac
-#    --enable-parser=aac_latm
     --enable-parser=mpegaudio
+    --enable-parser=mpegvideo
+    --enable-parser=mjpeg
+    --enable-parser=aac
+    --enable-parser=aac_latm
 "
 
 PROTOCOLS=""
@@ -173,18 +147,6 @@ BSFS="
 
 INPUT_DEVICES="
     --enable-indev=dshow
-#    --enable-indev=lavfi
-#    --enable-indev=vfwcap
-#    --enable-indev=alsa
-#    --enable-indev=fbdev
-#    --enable-indev=libcdio
-#    --enable-indev=libdc1394
-#    --enable-indev=oss
-#    --enable-indev=pulse
-#    --enable-indev=sndio
-#    --enable-indev=v4l2
-#    --enable-indev=x11grab
-#    --enable-indev=openal
 "
 
 OUTPUT_DEVICES="
