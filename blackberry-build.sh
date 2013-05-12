@@ -45,6 +45,7 @@ DEMUXERS="\
     --enable-demuxer=mpegps \
     --enable-demuxer=mpegvideo \
     --enable-demuxer=avi \
+    --enable-demuxer=mp3 \
     --enable-demuxer=aac \
     --enable-demuxer=oma \
     --enable-demuxer=pcm_s16le \

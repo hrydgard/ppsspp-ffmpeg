@@ -109,6 +109,7 @@ MUXERS="
 DEMUXERS="
     --enable-demuxer=h264
     --enable-demuxer=m4v
+    --enable-demuxer=mp3
     --enable-demuxer=mpegvideo
     --enable-demuxer=mpegps
     --enable-demuxer=mjpeg

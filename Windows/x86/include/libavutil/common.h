@@ -29,7 +29,15 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
+#if defined(BLACKBERRY) && defined(__cplusplus)
+extern "C" {
+#undef __cplusplus
 #include <math.h>
+#define __cplusplus 1
+}
+#else
+#include <math.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

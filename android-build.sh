@@ -43,6 +43,7 @@ DEMUXERS="\
     --enable-demuxer=m4v \
     --enable-demuxer=mpegvideo \
     --enable-demuxer=mpegps \
+    --enable-demuxer=mp3 \
     --enable-demuxer=avi \
     --enable-demuxer=aac \
     --enable-demuxer=pmp \
