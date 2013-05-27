@@ -22,19 +22,20 @@ MODULES="\
    --disable-avfilter \
    --disable-postproc \
    --disable-encoders \
-   --disable-doc \
-   --disable-ffplay \
-   --disable-ffprobe \
-   --disable-ffserver \
-   --disable-ffmpeg"
+   --disable-protocols \
+   --disable-hwaccels \
+   --disable-doc"
 
 VIDEO_DECODERS="\
    --enable-decoder=h264 \
-   --enable-decoder=mpeg2video"
+   --enable-decoder=mpeg4 \
+   --enable-decoder=mpeg2video \
+   --enable-decoder=mjpeg \
+   --enable-decoder=mjpegb"
 
 AUDIO_DECODERS="\
     --enable-decoder=aac \
-    --enable-decoder=atrac1 \
+    --enable-decoder=aac_latm \
     --enable-decoder=atrac3 \
     --enable-decoder=mp3 \
     --enable-decoder=pcm_s16le \
@@ -42,11 +43,13 @@ AUDIO_DECODERS="\
   
 DEMUXERS="\
     --enable-demuxer=h264 \
-    --enable-demuxer=mpegps \
+    --enable-demuxer=m4v \
     --enable-demuxer=mpegvideo \
-    --enable-demuxer=avi \
+    --enable-demuxer=mpegps \
     --enable-demuxer=mp3 \
+    --enable-demuxer=avi \
     --enable-demuxer=aac \
+    --enable-demuxer=pmp \
     --enable-demuxer=oma \
     --enable-demuxer=pcm_s16le \
     --enable-demuxer=pcm_s8 \
@@ -55,16 +58,17 @@ DEMUXERS="\
 PARSERS="\
     --enable-parser=h264 \
     --enable-parser=mpeg4video \
+    --enable-parser=mpegaudio \
     --enable-parser=mpegvideo \
     --enable-parser=aac \
-    --enable-parser=mpegaudio" 
+    --enable-parser=aac_latm"
 
 
 ./configure --target-os=qnx \
     --prefix=./blackberry/armv7 \
     ${GENERAL} \
     --sysroot=$QNX_TARGET \
-    --extra-cflags="-O3 -fpic -DBLACKBERRY -DQNX -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -DCMP_HAVE_VFP -mfloat-abi=softfp -mfpu=neon -march=armv7" \
+    --extra-cflags="-O3 -fpic -DBLACKBERRY -DQNX -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -DCMP_HAVE_VFP -mfloat-abi=softfp -mfpu=neon -march=armv7 -mcpu=cortex-a9" \
     --disable-shared \
     --enable-static \
     --extra-ldflags="-Wl,-rpath-link=$QNX_TARGET/armle-v7/usr/lib -L$QNX_TARGET/armle-v7/usr/lib" \
