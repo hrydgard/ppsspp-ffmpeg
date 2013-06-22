@@ -88,5 +88,4 @@ PARSERS="\
     --disable-neon
 
 make clean
-# Copies them to the Symbian LIB dir so that they can be linked directly
-make install && for i in symbian/armv6/lib/*.a; do j=`echo $i | cut -d . -f 1 | cut -c22-`".lib"; mv $i $EPOCLIB/urel/$j; done
+make install && ./symbian-install.sh
