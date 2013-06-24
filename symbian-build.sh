@@ -88,4 +88,4 @@ PARSERS="\
     --disable-neon
 
 make clean
-make install && ./symbian-install.sh
+make install && for i in symbian/armv6/lib/*.a;	do j=`echo $i | cut -d . -f 1 | cut -c22-`".lib"; mv $i symbian/armv6/lib/$j; done
