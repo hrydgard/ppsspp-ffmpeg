@@ -10,7 +10,7 @@ echo "Building for Symbian^3"
 COMPILERROOT=~/Downloads/arm-2012.03
 
 EPOCLIB=$EPOCROOT/epoc32/release/armv5
-EPOCINC=$PLATFORM/include
+EPOCINC=$EPOCROOT/epoc32/include
 
 GENERAL="\
    --enable-cross-compile \
@@ -74,7 +74,7 @@ PARSERS="\
 ./configure --target-os=symbian \
     --prefix=./symbian/armv6 \
     ${GENERAL} \
-    --extra-cflags="-D__GCC32__ -D__EPOC32__ -D__MARM_ARMV5__ -D__EABI__ -D__SUPPORT_CPP_EXCEPTIONS__ -nostdinc -I $EPOCINC/platform -I $EPOCINC/stdapis -I $EPOCINC/stdapis/sys -I $EPOCINC/stdapis/stlportv5 -I $EPOCINC/stdapis/stlportv5/stl -O3 -fpic -DSYMBIAN -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -DCMP_HAVE_VFP -mfloat-abi=softfp -mfpu=vfp -marm" \
+    --extra-cflags="-D__EPOC32__ -D__MARM_ARMV5__ -D__EABI__ -D__SUPPORT_CPP_EXCEPTIONS__ -nostdinc -I $EPOCINC -I $EPOCINC/platform -I $EPOCINC/stdapis -I $EPOCINC/stdapis/sys -I $EPOCINC/stdapis/stlportv5 -I $EPOCINC/stdapis/stlportv5/stl -O3 -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -DHAVE_UNISTD_H -DCMP_HAVE_VFP -mfloat-abi=softfp -mfpu=vfp -marm" \
     --disable-shared \
     --enable-static \
     --extra-ldflags="-Wl,-rpath-link=$EPOCLIB/lib -L$EPOCLIB/lib -L$EPOCLIB/urel -L$COMPILERROOT/arm-none-symbianelf/lib -nostdlib" \
