@@ -2,7 +2,7 @@
 #Change NDK to your Android NDK location
 NDK=/c/AndroidNDK
 PLATFORM=$NDK/platforms/android-8/arch-arm/
-PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.4.3/prebuilt/windows-x86_64
+PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.6/prebuilt/windows-x86_64
 
 GENERAL="\
    --enable-cross-compile \
