@@ -328,6 +328,9 @@ int ff_vbv_update(MpegEncContext *s, int frame_size)
         rcc->buffer_index -= frame_size;
         if (rcc->buffer_index < 0) {
             av_log(s->avctx, AV_LOG_ERROR, "rc buffer underflow\n");
+            if (frame_size > max_rate && s->qscale == s->avctx->qmax) {
+                av_log(s->avctx, AV_LOG_ERROR, "max bitrate possibly too small or try trellis with large lmax or increase qmax\n");
+            }
             rcc->buffer_index = 0;
         }
 
@@ -920,7 +923,7 @@ static int init_pass2(MpegEncContext *s)
     double rate_factor          = 0;
     double step;
     const int filter_size = (int)(a->qblur * 4) | 1;
-    double expected_bits;
+    double expected_bits = 0; // init to silence gcc warning
     double *qscale, *blurred_qscale, qscale_sum;
 
     /* find complexity & const_bits & decide the pict_types */

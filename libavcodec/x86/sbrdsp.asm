@@ -2,20 +2,20 @@
 ;* AAC Spectral Band Replication decoding functions
 ;* Copyright (C) 2012 Christophe Gisquet <christophe.gisquet@gmail.com>
 ;*
-;* This file is part of Libav.
+;* This file is part of FFmpeg.
 ;*
-;* Libav is free software; you can redistribute it and/or
+;* FFmpeg is free software; you can redistribute it and/or
 ;* modify it under the terms of the GNU Lesser General Public
 ;* License as published by the Free Software Foundation; either
 ;* version 2.1 of the License, or (at your option) any later version.
 ;*
-;* Libav is distributed in the hope that it will be useful,
+;* FFmpeg is distributed in the hope that it will be useful,
 ;* but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;* Lesser General Public License for more details.
 ;*
 ;* You should have received a copy of the GNU Lesser General Public
-;* License along with Libav; if not, write to the Free Software
+;* License along with FFmpeg; if not, write to the Free Software
 ;* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 ;******************************************************************************
 
@@ -292,23 +292,23 @@ INIT_XMM sse2
 SBR_QMF_DEINT_BFLY
 
 INIT_XMM sse2
-cglobal sbr_qmf_pre_shuffle, 1,4,7,z
+cglobal sbr_qmf_pre_shuffle, 1,4,6,z
 %define OFFSET  (32*4-2*mmsize)
     mov       r3q, OFFSET
     lea       r1q, [zq + (32+1)*4]
     lea       r2q, [zq + 64*4]
-    mova       m6, [ps_neg]
+    mova       m5, [ps_neg]
 .loop:
     movu       m0, [r1q]
     movu       m2, [r1q + mmsize]
     movu       m1, [zq + r3q + 4 + mmsize]
     movu       m3, [zq + r3q + 4]
 
-    pxor       m2, m6
-    pxor       m0, m6
+    pxor       m2, m5
+    pxor       m0, m5
     pshufd     m2, m2, q0123
     pshufd     m0, m0, q0123
-    SBUTTERFLY dq, 2, 3, 5
+    SBUTTERFLY dq, 2, 3, 4
     SBUTTERFLY dq, 0, 1, 4
     mova  [r2q + 2*r3q + 0*mmsize], m2
     mova  [r2q + 2*r3q + 1*mmsize], m3
@@ -317,7 +317,7 @@ cglobal sbr_qmf_pre_shuffle, 1,4,7,z
     add       r1q, 2*mmsize
     sub       r3q, 2*mmsize
     jge      .loop
-    mova       m2, [zq]
+    movq       m2, [zq]
     movq    [r2q], m2
     REP_RET
 

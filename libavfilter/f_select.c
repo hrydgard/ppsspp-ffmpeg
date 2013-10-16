@@ -59,6 +59,13 @@ static const char *const var_names[] = {
     "SI",
     "SP",
     "BI",
+    "PICT_TYPE_I",
+    "PICT_TYPE_P",
+    "PICT_TYPE_B",
+    "PICT_TYPE_S",
+    "PICT_TYPE_SI",
+    "PICT_TYPE_SP",
+    "PICT_TYPE_BI",
 
     "interlace_type",    ///< the frame interlace type
     "PROGRESSIVE",
@@ -95,6 +102,13 @@ enum var_name {
     VAR_PREV_SELECTED_T,
 
     VAR_PICT_TYPE,
+    VAR_I,
+    VAR_P,
+    VAR_B,
+    VAR_S,
+    VAR_SI,
+    VAR_SP,
+    VAR_BI,
     VAR_PICT_TYPE_I,
     VAR_PICT_TYPE_P,
     VAR_PICT_TYPE_B,
@@ -200,11 +214,18 @@ static int config_input(AVFilterLink *inlink)
     select->var_values[VAR_START_PTS]         = NAN;
     select->var_values[VAR_START_T]           = NAN;
 
+    select->var_values[VAR_I]  = AV_PICTURE_TYPE_I;
+    select->var_values[VAR_P]  = AV_PICTURE_TYPE_P;
+    select->var_values[VAR_B]  = AV_PICTURE_TYPE_B;
+    select->var_values[VAR_SI] = AV_PICTURE_TYPE_SI;
+    select->var_values[VAR_SP] = AV_PICTURE_TYPE_SP;
+    select->var_values[VAR_BI] = AV_PICTURE_TYPE_BI;
     select->var_values[VAR_PICT_TYPE_I]  = AV_PICTURE_TYPE_I;
     select->var_values[VAR_PICT_TYPE_P]  = AV_PICTURE_TYPE_P;
     select->var_values[VAR_PICT_TYPE_B]  = AV_PICTURE_TYPE_B;
     select->var_values[VAR_PICT_TYPE_SI] = AV_PICTURE_TYPE_SI;
     select->var_values[VAR_PICT_TYPE_SP] = AV_PICTURE_TYPE_SP;
+    select->var_values[VAR_PICT_TYPE_BI] = AV_PICTURE_TYPE_BI;
 
     select->var_values[VAR_INTERLACE_TYPE_P] = INTERLACE_TYPE_P;
     select->var_values[VAR_INTERLACE_TYPE_T] = INTERLACE_TYPE_T;
@@ -447,24 +468,23 @@ static av_cold int aselect_init(AVFilterContext *ctx)
 
 static const AVFilterPad avfilter_af_aselect_inputs[] = {
     {
-        .name             = "default",
-        .type             = AVMEDIA_TYPE_AUDIO,
-        .get_audio_buffer = ff_null_get_audio_buffer,
-        .config_props     = config_input,
-        .filter_frame     = filter_frame,
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_AUDIO,
+        .config_props = config_input,
+        .filter_frame = filter_frame,
     },
     { NULL }
 };
 
 AVFilter avfilter_af_aselect = {
-    .name      = "aselect",
+    .name        = "aselect",
     .description = NULL_IF_CONFIG_SMALL("Select audio frames to pass in output."),
-    .init      = aselect_init,
-    .uninit    = uninit,
-    .priv_size = sizeof(SelectContext),
-    .inputs    = avfilter_af_aselect_inputs,
-    .priv_class = &aselect_class,
-    .flags     = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
+    .init        = aselect_init,
+    .uninit      = uninit,
+    .priv_size   = sizeof(SelectContext),
+    .inputs      = avfilter_af_aselect_inputs,
+    .priv_class  = &aselect_class,
+    .flags       = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };
 #endif /* CONFIG_ASELECT_FILTER */
 
@@ -491,26 +511,23 @@ static av_cold int select_init(AVFilterContext *ctx)
 
 static const AVFilterPad avfilter_vf_select_inputs[] = {
     {
-        .name             = "default",
-        .type             = AVMEDIA_TYPE_VIDEO,
-        .get_video_buffer = ff_null_get_video_buffer,
-        .config_props     = config_input,
-        .filter_frame     = filter_frame,
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_input,
+        .filter_frame = filter_frame,
     },
     { NULL }
 };
 
 AVFilter avfilter_vf_select = {
-    .name      = "select",
-    .description = NULL_IF_CONFIG_SMALL("Select video frames to pass in output."),
-    .init      = select_init,
-    .uninit    = uninit,
+    .name          = "select",
+    .description   = NULL_IF_CONFIG_SMALL("Select video frames to pass in output."),
+    .init          = select_init,
+    .uninit        = uninit,
     .query_formats = query_formats,
-
-    .priv_size = sizeof(SelectContext),
-    .priv_class = &select_class,
-
-    .inputs    = avfilter_vf_select_inputs,
-    .flags     = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
+    .priv_size     = sizeof(SelectContext),
+    .priv_class    = &select_class,
+    .inputs        = avfilter_vf_select_inputs,
+    .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };
 #endif /* CONFIG_SELECT_FILTER */

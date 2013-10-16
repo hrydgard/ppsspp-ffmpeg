@@ -42,6 +42,7 @@
 #include <stdlib.h>
 
 #include "libavutil/mem.h"
+#include "libavutil/pixdesc.h"
 #include "avcodec.h"
 #include "bytestream.h"
 #include "internal.h"
@@ -482,6 +483,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     unsigned int max_basesize = FFALIGN(avctx->width,  4) *
                                 FFALIGN(avctx->height, 4);
     unsigned int max_decomp_size;
+    int subsample_h, subsample_v;
 
     if (avctx->extradata_size < 8) {
         av_log(avctx, AV_LOG_ERROR, "Extradata size too small.\n");
@@ -507,6 +509,10 @@ static av_cold int decode_init(AVCodecContext *avctx)
         max_decomp_size = max_basesize * 2;
         avctx->pix_fmt = AV_PIX_FMT_YUV422P;
         av_log(avctx, AV_LOG_DEBUG, "Image type is YUV 4:2:2.\n");
+        if (avctx->width % 4) {
+            avpriv_request_sample(avctx, "Unsupported dimensions\n");
+            return AVERROR_INVALIDDATA;
+        }
         break;
     case IMGTYPE_RGB24:
         c->decomp_size = basesize * 3;
@@ -534,6 +540,12 @@ static av_cold int decode_init(AVCodecContext *avctx)
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Unsupported image format %d.\n", c->imgtype);
+        return AVERROR_INVALIDDATA;
+    }
+
+    av_pix_fmt_get_chroma_sub_sample(avctx->pix_fmt, &subsample_h, &subsample_v);
+    if (avctx->width % (1<<subsample_h) || avctx->height % (1<<subsample_v)) {
+        avpriv_request_sample(avctx, "Unsupported dimensions\n");
         return AVERROR_INVALIDDATA;
     }
 
@@ -639,6 +651,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 #if CONFIG_MSZH_DECODER
 AVCodec ff_mszh_decoder = {
     .name           = "mszh",
+    .long_name      = NULL_IF_CONFIG_SMALL("LCL (LossLess Codec Library) MSZH"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_MSZH,
     .priv_data_size = sizeof(LclDecContext),
@@ -646,13 +659,13 @@ AVCodec ff_mszh_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("LCL (LossLess Codec Library) MSZH"),
 };
 #endif
 
 #if CONFIG_ZLIB_DECODER
 AVCodec ff_zlib_decoder = {
     .name           = "zlib",
+    .long_name      = NULL_IF_CONFIG_SMALL("LCL (LossLess Codec Library) ZLIB"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_ZLIB,
     .priv_data_size = sizeof(LclDecContext),
@@ -660,6 +673,5 @@ AVCodec ff_zlib_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("LCL (LossLess Codec Library) ZLIB"),
 };
 #endif

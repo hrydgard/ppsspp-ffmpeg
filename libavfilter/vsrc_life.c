@@ -65,9 +65,6 @@ typedef struct {
     uint32_t random_seed;
     int stitch;
     int mold;
-    char  *life_color_str;
-    char *death_color_str;
-    char  *mold_color_str;
     uint8_t  life_color[4];
     uint8_t death_color[4];
     uint8_t  mold_color[4];
@@ -93,10 +90,10 @@ static const AVOption life_options[] = {
     { "seed",        "set the seed for filling the initial grid randomly", OFFSET(random_seed), AV_OPT_TYPE_INT, {.i64=-1}, -1, UINT32_MAX, FLAGS },
     { "stitch",      "stitch boundaries", OFFSET(stitch), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, FLAGS },
     { "mold",        "set mold speed for dead cells", OFFSET(mold), AV_OPT_TYPE_INT, {.i64=0}, 0, 0xFF, FLAGS },
-    { "life_color",  "set life color",  OFFSET( life_color_str), AV_OPT_TYPE_STRING, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "death_color", "set death color", OFFSET(death_color_str), AV_OPT_TYPE_STRING, {.str="black"}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "mold_color",  "set mold color",  OFFSET( mold_color_str), AV_OPT_TYPE_STRING, {.str="black"}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { NULL },
+    { "life_color",  "set life color",  OFFSET( life_color), AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "death_color", "set death color", OFFSET(death_color), AV_OPT_TYPE_COLOR, {.str="black"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "mold_color",  "set mold color",  OFFSET( mold_color), AV_OPT_TYPE_COLOR, {.str="black"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { NULL }
 };
 
 AVFILTER_DEFINE_CLASS(life);
@@ -197,8 +194,8 @@ static int init_pattern_from_file(AVFilterContext *ctx)
         life->h = h;
     }
 
-    if (!(life->buf[0] = av_mallocz(sizeof(char) * life->h * life->w)) ||
-        !(life->buf[1] = av_mallocz(sizeof(char) * life->h * life->w))) {
+    if (!(life->buf[0] = av_calloc(life->h * life->w, sizeof(*life->buf[0]))) ||
+        !(life->buf[1] = av_calloc(life->h * life->w, sizeof(*life->buf[1])))) {
         av_free(life->buf[0]);
         av_free(life->buf[1]);
         return AVERROR(ENOMEM);
@@ -220,7 +217,7 @@ static int init_pattern_from_file(AVFilterContext *ctx)
     return 0;
 }
 
-static int init(AVFilterContext *ctx)
+static av_cold int init(AVFilterContext *ctx)
 {
     LifeContext *life = ctx->priv;
     int ret;
@@ -231,19 +228,6 @@ static int init(AVFilterContext *ctx)
     if ((ret = parse_rule(&life->born_rule, &life->stay_rule, life->rule_str, ctx)) < 0)
         return ret;
 
-#define PARSE_COLOR(name) do { \
-    if ((ret = av_parse_color(life->name ## _color, life->name ## _color_str, -1, ctx))) { \
-        av_log(ctx, AV_LOG_ERROR, "Invalid " #name " color '%s'\n", \
-               life->name ## _color_str); \
-        return ret; \
-    } \
-    av_freep(&life->name ## _color_str); \
-} while (0)
-
-    PARSE_COLOR(life);
-    PARSE_COLOR(death);
-    PARSE_COLOR(mold);
-
     if (!life->mold && memcmp(life->mold_color, "\x00\x00\x00", 3))
         av_log(ctx, AV_LOG_WARNING,
                "Mold color is set while mold isn't, ignoring the color.\n");
@@ -252,8 +236,8 @@ static int init(AVFilterContext *ctx)
         /* fill the grid randomly */
         int i;
 
-        if (!(life->buf[0] = av_mallocz(sizeof(char) * life->h * life->w)) ||
-            !(life->buf[1] = av_mallocz(sizeof(char) * life->h * life->w))) {
+        if (!(life->buf[0] = av_calloc(life->h * life->w, sizeof(*life->buf[0]))) ||
+            !(life->buf[1] = av_calloc(life->h * life->w, sizeof(*life->buf[1])))) {
             av_free(life->buf[0]);
             av_free(life->buf[1]);
             return AVERROR(ENOMEM);
@@ -454,13 +438,13 @@ static const AVFilterPad life_outputs[] = {
 };
 
 AVFilter avfilter_vsrc_life = {
-    .name        = "life",
-    .description = NULL_IF_CONFIG_SMALL("Create life."),
-    .priv_size = sizeof(LifeContext),
-    .init      = init,
-    .uninit    = uninit,
+    .name          = "life",
+    .description   = NULL_IF_CONFIG_SMALL("Create life."),
+    .priv_size     = sizeof(LifeContext),
+    .priv_class    = &life_class,
+    .init          = init,
+    .uninit        = uninit,
     .query_formats = query_formats,
     .inputs        = NULL,
     .outputs       = life_outputs,
-    .priv_class    = &life_class,
 };

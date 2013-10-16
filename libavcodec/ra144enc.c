@@ -447,7 +447,7 @@ static int ra144_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     if (ractx->last_frame)
         return 0;
 
-    if ((ret = ff_alloc_packet2(avctx, avpkt, FRAMESIZE)) < 0)
+    if ((ret = ff_alloc_packet2(avctx, avpkt, FRAME_SIZE)) < 0)
         return ret;
 
     /**
@@ -536,7 +536,7 @@ static int ra144_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     ff_af_queue_remove(&ractx->afq, avctx->frame_size, &avpkt->pts,
                        &avpkt->duration);
 
-    avpkt->size = FRAMESIZE;
+    avpkt->size = FRAME_SIZE;
     *got_packet_ptr = 1;
     return 0;
 }
@@ -544,6 +544,7 @@ static int ra144_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
 AVCodec ff_ra_144_encoder = {
     .name           = "real_144",
+    .long_name      = NULL_IF_CONFIG_SMALL("RealAudio 1.0 (14.4K)"),
     .type           = AVMEDIA_TYPE_AUDIO,
     .id             = AV_CODEC_ID_RA_144,
     .priv_data_size = sizeof(RA144Context),
@@ -554,5 +555,5 @@ AVCodec ff_ra_144_encoder = {
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
                                                      AV_SAMPLE_FMT_NONE },
     .supported_samplerates = (const int[]){ 8000, 0 },
-    .long_name      = NULL_IF_CONFIG_SMALL("RealAudio 1.0 (14.4K)"),
+    .channel_layouts = (const uint64_t[]) { AV_CH_LAYOUT_MONO, 0 },
 };

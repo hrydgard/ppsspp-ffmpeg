@@ -22,7 +22,6 @@
 #include "libavutil/pixdesc.h"
 #include "avformat.h"
 #include "internal.h"
-#include "libavutil/pixdesc.h"
 
 #define Y4M_MAGIC "YUV4MPEG2"
 #define Y4M_FRAME_MAGIC "FRAME"
@@ -217,8 +216,8 @@ static int yuv4_write_packet(AVFormatContext *s, AVPacket *pkt)
         // Adjust for smaller Cb and Cr planes
         av_pix_fmt_get_chroma_sub_sample(st->codec->pix_fmt, &h_chroma_shift,
                                          &v_chroma_shift);
-        width  >>= h_chroma_shift;
-        height >>= v_chroma_shift;
+        width  = FF_CEIL_RSHIFT(width,  h_chroma_shift);
+        height = FF_CEIL_RSHIFT(height, v_chroma_shift);
 
         ptr1 = picture->data[1];
         ptr2 = picture->data[2];

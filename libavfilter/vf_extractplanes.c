@@ -23,6 +23,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
+#include "drawutils.h"
 #include "internal.h"
 
 #define PLANE_R 0x01
@@ -38,6 +39,9 @@ typedef struct {
     int requested_planes;
     int map[4];
     int linesize[4];
+    int is_packed_rgb;
+    int depth;
+    int step;
 } ExtractPlanesContext;
 
 #define OFFSET(x) offsetof(ExtractPlanesContext, x)
@@ -47,8 +51,8 @@ static const AVOption extractplanes_options[] = {
     {      "y", "set luma plane",  0, AV_OPT_TYPE_CONST, {.i64=PLANE_Y}, 0, 0, FLAGS, "flags"},
     {      "u", "set u plane",     0, AV_OPT_TYPE_CONST, {.i64=PLANE_U}, 0, 0, FLAGS, "flags"},
     {      "v", "set v plane",     0, AV_OPT_TYPE_CONST, {.i64=PLANE_V}, 0, 0, FLAGS, "flags"},
-    {      "g", "set green plane", 0, AV_OPT_TYPE_CONST, {.i64=PLANE_G}, 0, 0, FLAGS, "flags"},
     {      "r", "set red plane",   0, AV_OPT_TYPE_CONST, {.i64=PLANE_R}, 0, 0, FLAGS, "flags"},
+    {      "g", "set green plane", 0, AV_OPT_TYPE_CONST, {.i64=PLANE_G}, 0, 0, FLAGS, "flags"},
     {      "b", "set blue plane",  0, AV_OPT_TYPE_CONST, {.i64=PLANE_B}, 0, 0, FLAGS, "flags"},
     {      "a", "set alpha plane", 0, AV_OPT_TYPE_CONST, {.i64=PLANE_A}, 0, 0, FLAGS, "flags"},
     { NULL }
@@ -75,6 +79,13 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_YUV444P16BE, AV_PIX_FMT_YUVA444P16BE,
         AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY8A,
         AV_PIX_FMT_GRAY16LE, AV_PIX_FMT_GRAY16BE,
+        AV_PIX_FMT_RGB24, AV_PIX_FMT_BGR24,
+        AV_PIX_FMT_RGBA, AV_PIX_FMT_BGRA,
+        AV_PIX_FMT_ARGB, AV_PIX_FMT_ABGR,
+        AV_PIX_FMT_RGB48LE, AV_PIX_FMT_BGR48LE,
+        AV_PIX_FMT_RGB48BE, AV_PIX_FMT_BGR48BE,
+        AV_PIX_FMT_RGBA64LE, AV_PIX_FMT_BGRA64LE,
+        AV_PIX_FMT_RGBA64BE, AV_PIX_FMT_BGRA64BE,
         AV_PIX_FMT_GBRP, AV_PIX_FMT_GBRAP,
         AV_PIX_FMT_GBRP16LE, AV_PIX_FMT_GBRP16BE,
         AV_PIX_FMT_GBRAP16LE, AV_PIX_FMT_GBRAP16BE,
@@ -89,7 +100,7 @@ static int query_formats(AVFilterContext *ctx)
     int i, depth = 0, be = 0;
 
     if (!ctx->inputs[0]->in_formats ||
-        !ctx->inputs[0]->in_formats->format_count) {
+        !ctx->inputs[0]->in_formats->nb_formats) {
         return AVERROR(EAGAIN);
     }
 
@@ -99,11 +110,11 @@ static int query_formats(AVFilterContext *ctx)
     avff = ctx->inputs[0]->in_formats;
     desc = av_pix_fmt_desc_get(avff->formats[0]);
     depth = desc->comp[0].depth_minus1;
-    be = desc->flags & PIX_FMT_BE;
-    for (i = 1; i < avff->format_count; i++) {
+    be = desc->flags & AV_PIX_FMT_FLAG_BE;
+    for (i = 1; i < avff->nb_formats; i++) {
         desc = av_pix_fmt_desc_get(avff->formats[i]);
         if (depth != desc->comp[0].depth_minus1 ||
-            be    != (desc->flags & PIX_FMT_BE)) {
+            be    != (desc->flags & AV_PIX_FMT_FLAG_BE)) {
             return AVERROR(EAGAIN);
         }
     }
@@ -125,18 +136,28 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     ExtractPlanesContext *e = ctx->priv;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
-    int plane_avail, ret;
+    int plane_avail, ret, i;
+    uint8_t rgba_map[4];
 
-    plane_avail = ((desc->flags & PIX_FMT_RGB) ? PLANE_R|PLANE_G|PLANE_B :
+    plane_avail = ((desc->flags & AV_PIX_FMT_FLAG_RGB) ? PLANE_R|PLANE_G|PLANE_B :
                                                  PLANE_Y |
                                 ((desc->nb_components > 2) ? PLANE_U|PLANE_V : 0)) |
-                  ((desc->flags & PIX_FMT_ALPHA) ? PLANE_A : 0);
+                  ((desc->flags & AV_PIX_FMT_FLAG_ALPHA) ? PLANE_A : 0);
     if (e->requested_planes & ~plane_avail) {
         av_log(ctx, AV_LOG_ERROR, "Requested planes not available.\n");
         return AVERROR(EINVAL);
     }
     if ((ret = av_image_fill_linesizes(e->linesize, inlink->format, inlink->w)) < 0)
         return ret;
+
+    e->depth = (desc->comp[0].depth_minus1 + 1) >> 3;
+    e->step = av_get_padded_bits_per_pixel(desc) >> 3;
+    e->is_packed_rgb = !(desc->flags & AV_PIX_FMT_FLAG_PLANAR);
+    if (desc->flags & AV_PIX_FMT_FLAG_RGB) {
+        ff_fill_rgba_map(rgba_map, inlink->format);
+        for (i = 0; i < 4; i++)
+            e->map[i] = rgba_map[e->map[i]];
+    }
 
     return 0;
 }
@@ -150,11 +171,36 @@ static int config_output(AVFilterLink *outlink)
     const int output = outlink->srcpad - ctx->output_pads;
 
     if (e->map[output] == 1 || e->map[output] == 2) {
-        outlink->h = inlink->h >> desc->log2_chroma_h;
-        outlink->w = inlink->w >> desc->log2_chroma_w;
+        outlink->h = FF_CEIL_RSHIFT(inlink->h, desc->log2_chroma_h);
+        outlink->w = FF_CEIL_RSHIFT(inlink->w, desc->log2_chroma_w);
     }
 
     return 0;
+}
+
+static void extract_from_packed(uint8_t *dst, int dst_linesize,
+                                const uint8_t *src, int src_linesize,
+                                int width, int height,
+                                int depth, int step, int comp)
+{
+    int x, y;
+
+    for (y = 0; y < height; y++) {
+        switch (depth) {
+        case 1:
+            for (x = 0; x < width; x++)
+                dst[x] = src[x * step + comp];
+            break;
+        case 2:
+            for (x = 0; x < width; x++) {
+                dst[x * 2    ] = src[x * step + comp * 2    ];
+                dst[x * 2 + 1] = src[x * step + comp * 2 + 1];
+            }
+            break;
+        }
+        dst += dst_linesize;
+        src += src_linesize;
+    }
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
@@ -168,7 +214,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
         const int idx = e->map[i];
         AVFrame *out;
 
-        if (outlink->closed || !frame->data[idx])
+        if (outlink->closed)
             continue;
 
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
@@ -178,9 +224,18 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
         }
         av_frame_copy_props(out, frame);
 
-        av_image_copy_plane(out->data[0], out->linesize[0],
-                            frame->data[idx], frame->linesize[idx],
-                            e->linesize[idx], outlink->h);
+        if (e->is_packed_rgb) {
+            extract_from_packed(out->data[0], out->linesize[0],
+                                frame->data[0], frame->linesize[0],
+                                outlink->w, outlink->h,
+                                e->depth,
+                                e->step, idx);
+        } else {
+            av_image_copy_plane(out->data[0], out->linesize[0],
+                                frame->data[idx], frame->linesize[idx],
+                                e->linesize[idx], outlink->h);
+        }
+
         ret = ff_filter_frame(outlink, out);
         if (ret == AVERROR_EOF)
             eof++;
@@ -196,7 +251,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     return ret;
 }
 
-static int init(AVFilterContext *ctx)
+static av_cold int init(AVFilterContext *ctx)
 {
     ExtractPlanesContext *e = ctx->priv;
     int planes = (e->requested_planes & 0xf) | (e->requested_planes >> 4);
@@ -253,3 +308,28 @@ AVFilter avfilter_vf_extractplanes = {
     .outputs       = NULL,
     .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };
+
+#if CONFIG_ALPHAEXTRACT_FILTER
+
+static av_cold int init_alphaextract(AVFilterContext *ctx)
+{
+    ExtractPlanesContext *e = ctx->priv;
+
+    e->requested_planes = PLANE_A;
+
+    return init(ctx);
+}
+
+AVFilter avfilter_vf_alphaextract = {
+    .name           = "alphaextract",
+    .description    = NULL_IF_CONFIG_SMALL("Extract an alpha channel as a "
+                      "grayscale image component."),
+    .priv_size      = sizeof(ExtractPlanesContext),
+    .init           = init_alphaextract,
+    .uninit         = uninit,
+    .query_formats  = query_formats,
+    .inputs         = extractplanes_inputs,
+    .outputs        = NULL,
+    .flags          = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
+};
+#endif  /* CONFIG_ALPHAEXTRACT_FILTER */

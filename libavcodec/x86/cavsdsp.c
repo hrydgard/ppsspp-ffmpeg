@@ -28,7 +28,8 @@
 #include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/cavsdsp.h"
-#include "dsputil_mmx.h"
+#include "constants.h"
+#include "dsputil_x86.h"
 #include "config.h"
 
 #if HAVE_MMX_INLINE
@@ -121,6 +122,17 @@ static inline void cavs_idct8_1d(int16_t *block, uint64_t bias)
         :: "r"(block), "m"(bias)
     );
 }
+
+#define SBUTTERFLY(a,b,t,n,m)\
+    "mov" #m " " #a ", " #t "         \n\t" /* abcd */\
+    "punpckl" #n " " #b ", " #a "     \n\t" /* aebf */\
+    "punpckh" #n " " #b ", " #t "     \n\t" /* cgdh */\
+
+#define TRANSPOSE4(a,b,c,d,t)\
+    SBUTTERFLY(a,b,t,wd,q) /* a=aebf t=cgdh */\
+    SBUTTERFLY(c,d,b,wd,q) /* c=imjn b=kolp */\
+    SBUTTERFLY(a,c,d,dq,q) /* a=aeim d=bfjn */\
+    SBUTTERFLY(t,b,c,dq,q) /* t=cgko c=dhlp */
 
 static void cavs_idct8_add_mmx(uint8_t *dst, int16_t *block, int stride)
 {
@@ -530,17 +542,17 @@ static av_cold void cavsdsp_init_3dnow(CAVSDSPContext *c,
 av_cold void ff_cavsdsp_init_x86(CAVSDSPContext *c, AVCodecContext *avctx)
 {
 #if HAVE_MMX_INLINE
-    int mm_flags = av_get_cpu_flags();
+    int cpu_flags = av_get_cpu_flags();
 
-    if (mm_flags & AV_CPU_FLAG_MMX)
+    if (INLINE_MMX(cpu_flags))
         cavsdsp_init_mmx(c, avctx);
 #endif /* HAVE_MMX_INLINE */
 #if HAVE_MMXEXT_INLINE
-    if (mm_flags & AV_CPU_FLAG_MMXEXT)
+    if (INLINE_MMXEXT(cpu_flags))
         cavsdsp_init_mmxext(c, avctx);
 #endif /* HAVE_MMXEXT_INLINE */
 #if HAVE_AMD3DNOW_INLINE
-    if (mm_flags & AV_CPU_FLAG_3DNOW)
+    if (INLINE_AMD3DNOW(cpu_flags))
         cavsdsp_init_3dnow(c, avctx);
 #endif /* HAVE_AMD3DNOW_INLINE */
 }

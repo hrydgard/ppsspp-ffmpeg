@@ -33,7 +33,6 @@
 #include "libavutil/internal.h"
 #include "libavutil/opt.h"
 #include "avfilter.h"
-#include "internal.h"
 #include "formats.h"
 #include "internal.h"
 #include "video.h"
@@ -62,30 +61,30 @@ static int query_formats(AVFilterContext *ctx)
 static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
     AVFilterContext *ctx = inlink->dst;
-    BlackFrameContext *blackframe = ctx->priv;
+    BlackFrameContext *s = ctx->priv;
     int x, i;
     int pblack = 0;
     uint8_t *p = frame->data[0];
 
     for (i = 0; i < frame->height; i++) {
         for (x = 0; x < inlink->w; x++)
-            blackframe->nblack += p[x] < blackframe->bthresh;
+            s->nblack += p[x] < s->bthresh;
         p += frame->linesize[0];
     }
 
     if (frame->key_frame)
-        blackframe->last_keyframe = blackframe->frame;
+        s->last_keyframe = s->frame;
 
-    pblack = blackframe->nblack * 100 / (inlink->w * inlink->h);
-    if (pblack >= blackframe->bamount)
+    pblack = s->nblack * 100 / (inlink->w * inlink->h);
+    if (pblack >= s->bamount)
         av_log(ctx, AV_LOG_INFO, "frame:%u pblack:%u pts:%"PRId64" t:%f "
                "type:%c last_keyframe:%d\n",
-               blackframe->frame, pblack, frame->pts,
+               s->frame, pblack, frame->pts,
                frame->pts == AV_NOPTS_VALUE ? -1 : frame->pts * av_q2d(inlink->time_base),
-               av_get_picture_type_char(frame->pict_type), blackframe->last_keyframe);
+               av_get_picture_type_char(frame->pict_type), s->last_keyframe);
 
-    blackframe->frame++;
-    blackframe->nblack = 0;
+    s->frame++;
+    s->nblack = 0;
     return ff_filter_frame(inlink->dst->outputs[0], frame);
 }
 
@@ -98,17 +97,16 @@ static const AVOption blackframe_options[] = {
                                                  OFFSET(bthresh), AV_OPT_TYPE_INT, { .i64 = 32 }, 0, 255,     FLAGS },
     { "thresh", "threshold below which a pixel value is considered black",
                                                  OFFSET(bthresh), AV_OPT_TYPE_INT, { .i64 = 32 }, 0, 255,     FLAGS },
-    { NULL },
+    { NULL }
 };
 
 AVFILTER_DEFINE_CLASS(blackframe);
 
 static const AVFilterPad avfilter_vf_blackframe_inputs[] = {
     {
-        .name             = "default",
-        .type             = AVMEDIA_TYPE_VIDEO,
-        .get_video_buffer = ff_null_get_video_buffer,
-        .filter_frame     = filter_frame,
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .filter_frame = filter_frame,
     },
     { NULL }
 };
@@ -122,15 +120,11 @@ static const AVFilterPad avfilter_vf_blackframe_outputs[] = {
 };
 
 AVFilter avfilter_vf_blackframe = {
-    .name        = "blackframe",
-    .description = NULL_IF_CONFIG_SMALL("Detect frames that are (almost) black."),
-
-    .priv_size = sizeof(BlackFrameContext),
-    .priv_class = &blackframe_class,
-
+    .name          = "blackframe",
+    .description   = NULL_IF_CONFIG_SMALL("Detect frames that are (almost) black."),
+    .priv_size     = sizeof(BlackFrameContext),
+    .priv_class    = &blackframe_class,
     .query_formats = query_formats,
-
-    .inputs    = avfilter_vf_blackframe_inputs,
-
-    .outputs   = avfilter_vf_blackframe_outputs,
+    .inputs        = avfilter_vf_blackframe_inputs,
+    .outputs       = avfilter_vf_blackframe_outputs,
 };

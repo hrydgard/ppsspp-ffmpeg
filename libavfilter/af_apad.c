@@ -51,7 +51,7 @@ static const AVOption apad_options[] = {
     { "packet_size", "set silence packet size", OFFSET(packet_size), AV_OPT_TYPE_INT, { .i64 = 4096 }, 0, INT_MAX, A },
     { "pad_len",     "number of samples of silence to add",          OFFSET(pad_len),   AV_OPT_TYPE_INT64, { .i64 = 0 }, 0, INT64_MAX, A },
     { "whole_len",   "target number of samples in the audio stream", OFFSET(whole_len), AV_OPT_TYPE_INT64, { .i64 = 0 }, 0, INT64_MAX, A },
-    { NULL },
+    { NULL }
 };
 
 AVFILTER_DEFINE_CLASS(apad);
@@ -89,7 +89,7 @@ static int request_frame(AVFilterLink *outlink)
 
     ret = ff_request_frame(ctx->inputs[0]);
 
-    if (ret == AVERROR_EOF) {
+    if (ret == AVERROR_EOF && !ctx->is_disabled) {
         int n_out = apad->packet_size;
         AVFrame *outsamplesref;
 
@@ -132,7 +132,7 @@ static const AVFilterPad apad_inputs[] = {
         .type         = AVMEDIA_TYPE_AUDIO,
         .filter_frame = filter_frame,
     },
-    { NULL },
+    { NULL }
 };
 
 static const AVFilterPad apad_outputs[] = {
@@ -141,7 +141,7 @@ static const AVFilterPad apad_outputs[] = {
         .request_frame = request_frame,
         .type          = AVMEDIA_TYPE_AUDIO,
     },
-    { NULL },
+    { NULL }
 };
 
 AVFilter avfilter_af_apad = {
@@ -152,4 +152,5 @@ AVFilter avfilter_af_apad = {
     .inputs        = apad_inputs,
     .outputs       = apad_outputs,
     .priv_class    = &apad_class,
+    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };

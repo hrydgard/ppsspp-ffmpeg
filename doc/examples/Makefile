@@ -7,7 +7,7 @@ FFMPEG_LIBS=    libavdevice                        \
                 libswscale                         \
                 libavutil                          \
 
-CFLAGS += -Wall -O2 -g
+CFLAGS += -Wall -g
 CFLAGS := $(shell pkg-config --cflags $(FFMPEG_LIBS)) $(CFLAGS)
 LDLIBS := $(shell pkg-config --libs $(FFMPEG_LIBS)) $(LDLIBS)
 
@@ -25,6 +25,7 @@ OBJS=$(addsuffix .o,$(EXAMPLES))
 # the following examples make explicit use of the math library
 decoding_encoding: LDLIBS += -lm
 muxing:            LDLIBS += -lm
+resampling_audio:  LDLIBS += -lm
 
 .phony: all clean-test clean
 

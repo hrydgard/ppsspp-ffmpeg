@@ -14,7 +14,9 @@ COMPONENTS-$(CONFIG_AVFORMAT)   += ffmpeg-formats ffmpeg-protocols
 COMPONENTS-$(CONFIG_AVDEVICE)   += ffmpeg-devices
 COMPONENTS-$(CONFIG_AVFILTER)   += ffmpeg-filters
 
-MANPAGES    = $(PROGS-yes:%=doc/%.1)    $(PROGS-yes:%=doc/%-all.1)    $(COMPONENTS-yes:%=doc/%.1)    $(LIBRARIES-yes:%=doc/%.3)
+MANPAGES1   = $(PROGS-yes:%=doc/%.1)    $(PROGS-yes:%=doc/%-all.1)    $(COMPONENTS-yes:%=doc/%.1)
+MANPAGES3   = $(LIBRARIES-yes:%=doc/%.3)
+MANPAGES    = $(MANPAGES1) $(MANPAGES3)
 PODPAGES    = $(PROGS-yes:%=doc/%.pod)  $(PROGS-yes:%=doc/%-all.pod)  $(COMPONENTS-yes:%=doc/%.pod)  $(LIBRARIES-yes:%=doc/%.pod)
 HTMLPAGES   = $(PROGS-yes:%=doc/%.html) $(PROGS-yes:%=doc/%-all.html) $(COMPONENTS-yes:%=doc/%.html) $(LIBRARIES-yes:%=doc/%.html) \
               doc/developer.html                                        \
@@ -86,20 +88,40 @@ $(DOCS) doc/doxy/html: | doc/
 doc/doxy/html: $(SRC_PATH)/doc/Doxyfile $(INSTHEADERS)
 	$(M)$(SRC_PATH)/doc/doxy-wrapper.sh $(SRC_PATH) $^
 
+install-doc: install-html install-man
+
+install-html:
+
 install-man:
+
+ifdef CONFIG_HTMLPAGES
+install-progs-$(CONFIG_DOC): install-html
+
+install-html: $(HTMLPAGES)
+	$(Q)mkdir -p "$(DOCDIR)"
+	$(INSTALL) -m 644 $(HTMLPAGES) "$(DOCDIR)"
+endif
 
 ifdef CONFIG_MANPAGES
 install-progs-$(CONFIG_DOC): install-man
 
 install-man: $(MANPAGES)
 	$(Q)mkdir -p "$(MANDIR)/man1"
-	$(INSTALL) -m 644 $(MANPAGES) "$(MANDIR)/man1"
+	$(INSTALL) -m 644 $(MANPAGES1) "$(MANDIR)/man1"
+	$(Q)mkdir -p "$(MANDIR)/man3"
+	$(INSTALL) -m 644 $(MANPAGES3) "$(MANDIR)/man3"
 endif
 
-uninstall: uninstall-man
+uninstall: uninstall-doc
+
+uninstall-doc: uninstall-html uninstall-man
+
+uninstall-html:
+	$(RM) -r "$(DOCDIR)"
 
 uninstall-man:
-	$(RM) $(addprefix "$(MANDIR)/man1/",$(ALLMANPAGES))
+	$(RM) $(addprefix "$(MANDIR)/man1/",$(MANPAGES1))
+	$(RM) $(addprefix "$(MANDIR)/man3/",$(MANPAGES3))
 
 clean:: docclean
 

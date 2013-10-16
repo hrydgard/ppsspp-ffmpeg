@@ -41,9 +41,6 @@
 #include "flv.h"
 #include "mpeg4video.h"
 
-//#define DEBUG
-//#define PRINT_FRAME_TIME
-
 av_cold int ff_h263_decode_init(AVCodecContext *avctx)
 {
     MpegEncContext *s = avctx->priv_data;
@@ -116,6 +113,9 @@ av_cold int ff_h263_decode_init(AVCodecContext *avctx)
     s->codec_id= avctx->codec->id;
     avctx->hwaccel= ff_find_hwaccel(avctx->codec->id, avctx->pix_fmt);
 
+    if (avctx->stream_codec_tag == AV_RL32("l263") && avctx->extradata_size == 56 && avctx->extradata[0] == 1)
+        s->ehc_mode = 1;
+
     /* for h263, we allocate the images after having read the header */
     if (avctx->codec->id != AV_CODEC_ID_H263 && avctx->codec->id != AV_CODEC_ID_H263P && avctx->codec->id != AV_CODEC_ID_MPEG4)
         if ((ret = ff_MPV_common_init(s)) < 0)
@@ -170,9 +170,10 @@ static int decode_slice(MpegEncContext *s){
 
     if (s->avctx->hwaccel) {
         const uint8_t *start= s->gb.buffer + get_bits_count(&s->gb)/8;
-        const uint8_t *end  = ff_h263_find_resync_marker(s, start + 1, s->gb.buffer_end);
-        skip_bits_long(&s->gb, 8*(end - start));
-        return s->avctx->hwaccel->decode_slice(s->avctx, start, end - start);
+        ret = s->avctx->hwaccel->decode_slice(s->avctx, start, s->gb.buffer_end - start);
+        // ensure we exit decode loop
+        s->mb_y = s->mb_height;
+        return ret;
     }
 
     if(s->partitioned_frame){
@@ -355,9 +356,6 @@ int ff_h263_decode_frame(AVCodecContext *avctx,
     int ret;
     AVFrame *pict = data;
 
-#ifdef PRINT_FRAME_TIME
-uint64_t time= rdtsc();
-#endif
     s->flags= avctx->flags;
     s->flags2= avctx->flags2;
 
@@ -598,17 +596,6 @@ retry:
         /* FIXME: By the way H263 decoder is evolving it should have */
         /* an H263EncContext                                         */
 
-    if ((!avctx->coded_width || !avctx->coded_height) && 0) {
-        ParseContext pc= s->parse_context; //FIXME move these demuxng hack to avformat
-
-        s->parse_context.buffer=0;
-        ff_MPV_common_end(s);
-        s->parse_context= pc;
-        avcodec_set_dimensions(avctx, s->width, s->height);
-
-        goto retry;
-    }
-
     if (s->width  != avctx->coded_width  ||
         s->height != avctx->coded_height ||
         s->context_reinit) {
@@ -675,7 +662,7 @@ retry:
     if (CONFIG_WMV2_DECODER && s->msmpeg4_version==5){
         ret = ff_wmv2_decode_secondary_picture_header(s);
         if(ret<0) return ret;
-        if(ret==1) goto intrax8_decoded;
+        if(ret==1) goto frame_end;
     }
 
     /* decode each macroblock */
@@ -708,7 +695,18 @@ retry:
 
     av_assert1(s->bitstream_buffer_size==0);
 frame_end:
+    ff_er_frame_end(&s->er);
+
+    if (avctx->hwaccel) {
+        if ((ret = avctx->hwaccel->end_frame(avctx)) < 0)
+            return ret;
+    }
+
+    ff_MPV_frame_end(s);
+
     /* divx 5.01+ bitstream reorder stuff */
+    /* Since this clobbers the input buffer and hwaccel codecs still need the
+     * data during hwaccel->end_frame we should not do this any earlier */
     if(s->codec_id==AV_CODEC_ID_MPEG4 && s->divx_packed){
         int current_pos= s->gb.buffer == s->bitstream_buffer ? 0 : (get_bits_count(&s->gb)>>3);
         int startcode_found=0;
@@ -735,16 +733,6 @@ frame_end:
         }
     }
 
-intrax8_decoded:
-    ff_er_frame_end(&s->er);
-
-    if (avctx->hwaccel) {
-        if ((ret = avctx->hwaccel->end_frame(avctx)) < 0)
-            return ret;
-    }
-
-    ff_MPV_frame_end(s);
-
     if (!s->divx_packed && avctx->hwaccel)
         ff_thread_finish_setup(avctx);
 
@@ -763,12 +751,23 @@ intrax8_decoded:
     }
 
     if(s->last_picture_ptr || s->low_delay){
+        if (   pict->format == AV_PIX_FMT_YUV420P
+            && (s->codec_tag == AV_RL32("GEOV") || s->codec_tag == AV_RL32("GEOX"))) {
+            int x, y, p;
+            av_frame_make_writable(pict);
+            for (p=0; p<3; p++) {
+                int w = FF_CEIL_RSHIFT(pict-> width, !!p);
+                int h = FF_CEIL_RSHIFT(pict->height, !!p);
+                int linesize = pict->linesize[p];
+                for (y=0; y<(h>>1); y++)
+                    for (x=0; x<w; x++)
+                        FFSWAP(int,
+                               pict->data[p][x + y*linesize],
+                               pict->data[p][x + (h-1-y)*linesize]);
+            }
+        }
         *got_frame = 1;
     }
-
-#ifdef PRINT_FRAME_TIME
-av_log(avctx, AV_LOG_DEBUG, "%"PRId64"\n", rdtsc()-time);
-#endif
 
     return (ret && (avctx->err_recognition & AV_EF_EXPLODE))?ret:get_consumed_bytes(s, buf_size);
 }
@@ -786,6 +785,7 @@ const enum AVPixelFormat ff_h263_hwaccel_pixfmt_list_420[] = {
 
 AVCodec ff_h263_decoder = {
     .name           = "h263",
+    .long_name      = NULL_IF_CONFIG_SMALL("H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H263,
     .priv_data_size = sizeof(MpegEncContext),
@@ -796,12 +796,12 @@ AVCodec ff_h263_decoder = {
                       CODEC_CAP_TRUNCATED | CODEC_CAP_DELAY,
     .flush          = ff_mpeg_flush,
     .max_lowres     = 3,
-    .long_name      = NULL_IF_CONFIG_SMALL("H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"),
     .pix_fmts       = ff_h263_hwaccel_pixfmt_list_420,
 };
 
 AVCodec ff_h263p_decoder = {
     .name           = "h263p",
+    .long_name      = NULL_IF_CONFIG_SMALL("H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H263P,
     .priv_data_size = sizeof(MpegEncContext),
@@ -812,6 +812,5 @@ AVCodec ff_h263p_decoder = {
                       CODEC_CAP_TRUNCATED | CODEC_CAP_DELAY,
     .flush          = ff_mpeg_flush,
     .max_lowres     = 3,
-    .long_name      = NULL_IF_CONFIG_SMALL("H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"),
     .pix_fmts       = ff_h263_hwaccel_pixfmt_list_420,
 };
