@@ -1,6 +1,7 @@
 #!/bin/bash
-#build ffmpeg for armv7,armv7s and uses lipo to create fat libraries and deletes the originals
 
+#build ffmpeg for armv7,armv7s and uses lipo to create fat libraries and deletes the originals
+# TODO: This should really limit the codecs built like the other ones.
 
 ./configure \
 --prefix=ios/armv7 \

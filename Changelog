@@ -40,6 +40,7 @@ version <next>
 - dpx parser
 - max_error_rate parameter in ffmpeg
 - PulseAudio output device
+- ATRAC3+ decoder
 
 
 version 2.0:
