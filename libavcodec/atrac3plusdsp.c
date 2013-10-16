@@ -44,7 +44,7 @@ static AVFloatDSPContext atrac3p_dsp;
  * - The 2nd one is the plain sine window of size 128
  *   wrapped into zero (at the start) and one (at the end) regions.
  *   Both regions are 32 samples long. */
-static float mdct_wind_steep[128]; ///< second MDCT window
+DECLARE_ALIGNED(32, static float, mdct_wind_steep)[128]; ///< second MDCT window
 
 av_cold void ff_atrac3p_init_imdct(AVCodecContext *avctx, FFTContext *mdct_ctx)
 {
@@ -71,10 +71,10 @@ av_cold void ff_atrac3p_init_imdct(AVCodecContext *avctx, FFTContext *mdct_ctx)
 
 #define DEQUANT_PHASE(ph) (((ph) & 0x1F) << 6)
 
-static float sine_table[2048]; ///< wave table
-static float hann_window[129]; ///< Hann windowing function
-static float amp_sf_tab[64];   ///< scalefactors for quantized amplitudes
-static float amp_mant_tab[16]; ///< mantissas for quantized amplitudes
+DECLARE_ALIGNED(32, static float sine_table)[2048]; ///< wave table
+DECLARE_ALIGNED(32, static float hann_window)[129]; ///< Hann windowing function
+DECLARE_ALIGNED(32, static float amp_sf_tab)[64];   ///< scalefactors for quantized amplitudes
+DECLARE_ALIGNED(32, static float amp_mant_tab)[16]; ///< mantissas for quantized amplitudes
 
 av_cold void ff_atrac3p_init_wave_synth(void)
 {
@@ -231,7 +231,7 @@ static const int subband_to_powgrp[ATRAC3P_SUBBANDS] = {
 };
 
 /* noise table for power compensation */
-static const float noise_tab[1024] = {
+DECLARE_ALIGNED(32, static const float, noise_tab)[1024] = {
     -0.01358032,  -0.05593872,   0.01696777,  -0.14871216,  -0.26412964,  -0.09893799,   0.25723267,
      0.02008057,  -0.72235107,  -0.44351196,  -0.22985840,   0.16833496,   0.46902466,   0.05917358,
     -0.15179443,   0.41299438,  -0.01287842,   0.13360596,   0.43557739,  -0.09530640,  -0.58422852,
@@ -503,7 +503,7 @@ static int mod23_lut[26] = {
 };
 
 /* First half of the 384-tap IPQF filtering coefficients. */
-static float ipqf_coeffs1[ATRAC3P_PQF_FIR_LEN][16] = {
+DECLARE_ALIGNED(32, static const float, ipqf_coeffs1)[ATRAC3P_PQF_FIR_LEN][16] = {
     { -5.8336207e-7,    -8.0604229e-7,    -4.2005411e-7,    -4.4400572e-8,
        3.226247e-8,      3.530856e-8,      1.2660377e-8,     0.000010516783,
       -0.000011838618,   6.005389e-7,      0.0000014333754,  0.0000023108685,
@@ -555,7 +555,7 @@ static float ipqf_coeffs1[ATRAC3P_PQF_FIR_LEN][16] = {
 };
 
 /* Second half of the 384-tap IPQF filtering coefficients. */
-static float ipqf_coeffs2[ATRAC3P_PQF_FIR_LEN][16] = {
+DECLARE_ALIGNED(32, static const float, ipqf_coeffs2)[ATRAC3P_PQF_FIR_LEN][16] = {
     {  5.22682e-7,       9.171448e-7,      0.0000010897784,  2.3649704e-7,
       -2.7792686e-7,    -5.2588763e-7,    -4.6299544e-7,     0.000010840992,
       -0.000012203576,  -0.000021961965,  -0.000021348773,  -0.000019907106,
