@@ -33,7 +33,6 @@ AUDIO_DECODERS="\
     --enable-decoder=aac \
     --enable-decoder=aac_latm \
     --enable-decoder=atrac3 \
-    --enable-decoder=atrac3p \
     --enable-decoder=mp3 \
     --enable-decoder=pcm_s16le \
     --enable-decoder=pcm_s8"
