@@ -2,7 +2,7 @@
 #Change NDK to your Android NDK location
 NDK=/c/AndroidNDK
 PLATFORM=$NDK/platforms/android-8/arch-arm/
-PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.4.3/prebuilt/windows-x86_64
+PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.6/prebuilt/windows-x86_64
 
 GENERAL="\
    --enable-cross-compile \
@@ -34,6 +34,7 @@ AUDIO_DECODERS="\
     --enable-decoder=aac \
     --enable-decoder=aac_latm \
     --enable-decoder=atrac3 \
+    --enable-decoder=atrac3p \
     --enable-decoder=mp3 \
     --enable-decoder=pcm_s16le \
     --enable-decoder=pcm_s8"
@@ -109,3 +110,4 @@ make install
 
 build_ARMv6
 build_ARMv7
+echo Android ARM builds finished

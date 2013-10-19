@@ -86,14 +86,14 @@ static void calc_diffs(const DecimateContext *dm, struct qitem *q,
 
     memset(bdiffs, 0, dm->bdiffsize * sizeof(*bdiffs));
 
-    for (plane = 0; plane < (dm->chroma ? 3 : 1); plane++) {
+    for (plane = 0; plane < (dm->chroma && f1->data[2] ? 3 : 1); plane++) {
         int x, y, xl;
         const int linesize1 = f1->linesize[plane];
         const int linesize2 = f2->linesize[plane];
         const uint8_t *f1p = f1->data[plane];
         const uint8_t *f2p = f2->data[plane];
-        int width    = plane ? f1->width  >> dm->hsub : f1->width;
-        int height   = plane ? f1->height >> dm->vsub : f1->height;
+        int width    = plane ? FF_CEIL_RSHIFT(f1->width,  dm->hsub) : f1->width;
+        int height   = plane ? FF_CEIL_RSHIFT(f1->height, dm->vsub) : f1->height;
         int hblockx  = dm->blockx / 2;
         int hblocky  = dm->blocky / 2;
 
@@ -340,8 +340,8 @@ static int query_formats(AVFilterContext *ctx)
 #define PF_ALPHA(suf)   AV_PIX_FMT_YUVA420##suf, AV_PIX_FMT_YUVA422##suf, AV_PIX_FMT_YUVA444##suf
 #define PF(suf)         PF_NOALPHA(suf), PF_ALPHA(suf)
         PF(P), PF(P9), PF(P10), PF_NOALPHA(P12), PF_NOALPHA(P14), PF(P16),
-        AV_PIX_FMT_YUV411P, AV_PIX_FMT_YUV410P,
-        AV_PIX_FMT_GRAY8,
+        AV_PIX_FMT_YUV440P, AV_PIX_FMT_YUV411P, AV_PIX_FMT_YUV410P,
+        AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY16,
         AV_PIX_FMT_NONE
     };
     ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));

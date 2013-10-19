@@ -34,9 +34,6 @@
 #include "avcodec.h"
 #include "rnd_avg.h"
 
-
-//#define DEBUG
-
 /* encoding scans */
 extern const uint8_t ff_alternate_horizontal_scan[64];
 extern const uint8_t ff_alternate_vertical_scan[64];
@@ -325,10 +322,10 @@ void ff_set_cmp(DSPContext* c, me_cmp_func *cmp, int type);
 void ff_dsputil_init_alpha(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_arm(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_bfin(DSPContext* c, AVCodecContext *avctx);
-void ff_dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_ppc(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_sh4(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_vis(DSPContext* c, AVCodecContext *avctx);
+void ff_dsputil_init_x86(DSPContext* c, AVCodecContext *avctx);
 
 void ff_dsputil_init_dwt(DSPContext *c);
 

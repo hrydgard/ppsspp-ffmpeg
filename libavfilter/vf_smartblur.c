@@ -166,7 +166,8 @@ static int config_props(AVFilterLink *inlink)
 
     alloc_sws_context(&sblur->luma, inlink->w, inlink->h, sblur->sws_flags);
     alloc_sws_context(&sblur->chroma,
-                      inlink->w >> sblur->hsub, inlink->h >> sblur->vsub,
+                      FF_CEIL_RSHIFT(inlink->w, sblur->hsub),
+                      FF_CEIL_RSHIFT(inlink->h, sblur->vsub),
                       sblur->sws_flags);
 
     return 0;
@@ -241,8 +242,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpic)
     SmartblurContext  *sblur  = inlink->dst->priv;
     AVFilterLink *outlink     = inlink->dst->outputs[0];
     AVFrame *outpic;
-    int cw = inlink->w >> sblur->hsub;
-    int ch = inlink->h >> sblur->vsub;
+    int cw = FF_CEIL_RSHIFT(inlink->w, sblur->hsub);
+    int ch = FF_CEIL_RSHIFT(inlink->h, sblur->vsub);
 
     outpic = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!outpic) {
@@ -290,16 +291,14 @@ static const AVFilterPad smartblur_outputs[] = {
 };
 
 AVFilter avfilter_vf_smartblur = {
-    .name        = "smartblur",
-    .description = NULL_IF_CONFIG_SMALL("Blur the input video without impacting the outlines."),
-
-    .priv_size = sizeof(SmartblurContext),
-
+    .name          = "smartblur",
+    .description   = NULL_IF_CONFIG_SMALL("Blur the input video without impacting the outlines."),
+    .priv_size     = sizeof(SmartblurContext),
     .init          = init,
     .uninit        = uninit,
     .query_formats = query_formats,
     .inputs        = smartblur_inputs,
     .outputs       = smartblur_outputs,
     .priv_class    = &smartblur_class,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE,
+    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };

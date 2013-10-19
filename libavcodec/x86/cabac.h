@@ -1,20 +1,20 @@
 /*
  * Copyright (c) 2003 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Libav.
+ * This file is part of FFmpeg.
  *
- * Libav is free software; you can redistribute it and/or
+ * FFmpeg is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
  * version 2.1 of the License, or (at your option) any later version.
  *
- * Libav is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with Libav; if not, write to the Free Software
+ * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
@@ -26,6 +26,13 @@
 #include "libavutil/x86/asm.h"
 #include "libavutil/internal.h"
 #include "config.h"
+
+#if   (defined(__i386) && defined(__clang__) && (__clang_major__<2 || (__clang_major__==2 && __clang_minor__<10)))\
+   || (                  !defined(__clang__) && defined(__llvm__) && __GNUC__==4 && __GNUC_MINOR__==2 && __GNUC_PATCHLEVEL__<=1)
+#       define BROKEN_COMPILER 1
+#else
+#       define BROKEN_COMPILER 0
+#endif
 
 #if HAVE_INLINE_ASM
 
@@ -149,9 +156,7 @@
 
 #endif /* BROKEN_RELOCATIONS */
 
-
-#if HAVE_7REGS && !(defined(__i386) && defined(__clang__) && (__clang_major__<2 || (__clang_major__==2 && __clang_minor__<10)))\
-               && !(                  !defined(__clang__) && defined(__llvm__) && __GNUC__==4 && __GNUC_MINOR__==2 && __GNUC_PATCHLEVEL__<=1)
+#if HAVE_7REGS && !BROKEN_COMPILER
 #define get_cabac_inline get_cabac_inline_x86
 static av_always_inline int get_cabac_inline_x86(CABACContext *c,
                                                  uint8_t *const state)
@@ -224,6 +229,48 @@ static av_always_inline int get_cabac_bypass_sign_x86(CABACContext *c, int val)
     );
     return val;
 }
+
+#if !BROKEN_COMPILER
+#define get_cabac_bypass get_cabac_bypass_x86
+static av_always_inline int get_cabac_bypass_x86(CABACContext *c)
+{
+    x86_reg tmp;
+    int res;
+    __asm__ volatile(
+        "movl        %c6(%2), %k1       \n\t"
+        "movl        %c3(%2), %%eax     \n\t"
+        "shl             $17, %k1       \n\t"
+        "add           %%eax, %%eax     \n\t"
+        "sub             %k1, %%eax     \n\t"
+        "cltd                           \n\t"
+        "and           %%edx, %k1       \n\t"
+        "add             %k1, %%eax     \n\t"
+        "inc           %%edx            \n\t"
+        "test           %%ax, %%ax      \n\t"
+        "jnz              1f            \n\t"
+        "mov         %c4(%2), %1        \n\t"
+        "subl        $0xFFFF, %%eax     \n\t"
+        "movzwl         (%1), %%ecx     \n\t"
+        "bswap         %%ecx            \n\t"
+        "shrl            $15, %%ecx     \n\t"
+        "addl          %%ecx, %%eax     \n\t"
+        "cmp         %c5(%2), %1        \n\t"
+        "jge              1f            \n\t"
+        "add"OPSIZE"      $2, %c4(%2)   \n\t"
+        "1:                             \n\t"
+        "movl          %%eax, %c3(%2)   \n\t"
+
+        : "=&d"(res), "=&r"(tmp)
+        : "r"(c),
+          "i"(offsetof(CABACContext, low)),
+          "i"(offsetof(CABACContext, bytestream)),
+          "i"(offsetof(CABACContext, bytestream_end)),
+          "i"(offsetof(CABACContext, range))
+        : "%eax", "%ecx", "memory"
+    );
+    return res;
+}
+#endif /* !BROKEN_COMPILER */
 
 #endif /* HAVE_INLINE_ASM */
 #endif /* AVCODEC_X86_CABAC_H */

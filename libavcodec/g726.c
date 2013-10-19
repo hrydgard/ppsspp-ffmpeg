@@ -368,7 +368,7 @@ static const AVOption options[] = {
     { NULL },
 };
 
-static const AVClass class = {
+static const AVClass g726_class = {
     .class_name = "g726",
     .item_name  = av_default_item_name,
     .option     = options,
@@ -382,6 +382,7 @@ static const AVCodecDefault defaults[] = {
 
 AVCodec ff_adpcm_g726_encoder = {
     .name           = "g726",
+    .long_name      = NULL_IF_CONFIG_SMALL("G.726 ADPCM"),
     .type           = AVMEDIA_TYPE_AUDIO,
     .id             = AV_CODEC_ID_ADPCM_G726,
     .priv_data_size = sizeof(G726Context),
@@ -390,8 +391,7 @@ AVCodec ff_adpcm_g726_encoder = {
     .capabilities   = CODEC_CAP_SMALL_LAST_FRAME,
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
                                                      AV_SAMPLE_FMT_NONE },
-    .long_name      = NULL_IF_CONFIG_SMALL("G.726 ADPCM"),
-    .priv_class     = &class,
+    .priv_class     = &g726_class,
     .defaults       = defaults,
 };
 #endif
@@ -401,6 +401,10 @@ static av_cold int g726_decode_init(AVCodecContext *avctx)
 {
     G726Context* c = avctx->priv_data;
 
+    if(avctx->channels > 1){
+        avpriv_request_sample(avctx, "Decoding more than one channel");
+        return AVERROR_PATCHWELCOME;
+    }
     avctx->channels       = 1;
     avctx->channel_layout = AV_CH_LAYOUT_MONO;
 
@@ -456,6 +460,7 @@ static void g726_decode_flush(AVCodecContext *avctx)
 
 AVCodec ff_adpcm_g726_decoder = {
     .name           = "g726",
+    .long_name      = NULL_IF_CONFIG_SMALL("G.726 ADPCM"),
     .type           = AVMEDIA_TYPE_AUDIO,
     .id             = AV_CODEC_ID_ADPCM_G726,
     .priv_data_size = sizeof(G726Context),
@@ -463,6 +468,5 @@ AVCodec ff_adpcm_g726_decoder = {
     .decode         = g726_decode_frame,
     .flush          = g726_decode_flush,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("G.726 ADPCM"),
 };
 #endif

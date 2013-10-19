@@ -87,12 +87,12 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
 AVCodec ff_cljr_decoder = {
     .name           = "cljr",
+    .long_name      = NULL_IF_CONFIG_SMALL("Cirrus Logic AccuPak"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_CLJR,
     .init           = decode_init,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Cirrus Logic AccuPak"),
 };
 #endif
 
@@ -168,7 +168,7 @@ static const AVOption options[] = {
     { NULL },
 };
 
-static const AVClass class = {
+static const AVClass cljr_class = {
     .class_name = "cljr encoder",
     .item_name  = av_default_item_name,
     .option     = options,
@@ -177,6 +177,7 @@ static const AVClass class = {
 
 AVCodec ff_cljr_encoder = {
     .name           = "cljr",
+    .long_name      = NULL_IF_CONFIG_SMALL("Cirrus Logic AccuPak"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_CLJR,
     .priv_data_size = sizeof(CLJRContext),
@@ -184,7 +185,6 @@ AVCodec ff_cljr_encoder = {
     .encode2        = encode_frame,
     .pix_fmts       = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV411P,
                                                    AV_PIX_FMT_NONE },
-    .long_name      = NULL_IF_CONFIG_SMALL("Cirrus Logic AccuPak"),
-    .priv_class     = &class,
+    .priv_class     = &cljr_class,
 };
 #endif

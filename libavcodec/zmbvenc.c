@@ -44,8 +44,6 @@
  */
 typedef struct ZmbvEncContext {
     AVCodecContext *avctx;
-    AVFrame pic;
-
     int range;
     uint8_t *comp_buf, *work_buf;
     uint8_t pal[768];
@@ -121,7 +119,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                         const AVFrame *pict, int *got_packet)
 {
     ZmbvEncContext * const c = avctx->priv_data;
-    AVFrame * const p = &c->pic;
+    AVFrame * const p = (AVFrame *)pict;
     uint8_t *src, *prev, *buf;
     uint32_t *palptr;
     int keyframe, chpal;
@@ -134,7 +132,6 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     c->curfrm++;
     if(c->curfrm == c->keyint)
         c->curfrm = 0;
-    *p = *pict;
     p->pict_type= keyframe ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
     p->key_frame= keyframe;
     chpal = !keyframe && memcmp(p->data[1], c->pal2, 1024);
@@ -312,8 +309,6 @@ static av_cold int encode_init(AVCodecContext *avctx)
         return -1;
     }
 
-    avctx->coded_frame = &c->pic;
-
     return 0;
 }
 
@@ -337,6 +332,7 @@ static av_cold int encode_end(AVCodecContext *avctx)
 
 AVCodec ff_zmbv_encoder = {
     .name           = "zmbv",
+    .long_name      = NULL_IF_CONFIG_SMALL("Zip Motion Blocks Video"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_ZMBV,
     .priv_data_size = sizeof(ZmbvEncContext),
@@ -344,5 +340,4 @@ AVCodec ff_zmbv_encoder = {
     .encode2        = encode_frame,
     .close          = encode_end,
     .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_PAL8, AV_PIX_FMT_NONE },
-    .long_name      = NULL_IF_CONFIG_SMALL("Zip Motion Blocks Video"),
 };

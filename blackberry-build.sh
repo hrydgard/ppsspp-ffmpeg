@@ -37,6 +37,7 @@ AUDIO_DECODERS="\
     --enable-decoder=aac \
     --enable-decoder=aac_latm \
     --enable-decoder=atrac3 \
+    --enable-decoder=atrac3p \
     --enable-decoder=mp3 \
     --enable-decoder=pcm_s16le \
     --enable-decoder=pcm_s8"
@@ -68,7 +69,7 @@ PARSERS="\
     --prefix=./blackberry/armv7 \
     ${GENERAL} \
     --sysroot=$QNX_TARGET \
-    --extra-cflags="-O3 -fpic -DBLACKBERRY -DQNX -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -DCMP_HAVE_VFP -mfloat-abi=softfp -mfpu=neon -march=armv7 -mcpu=cortex-a9" \
+    --extra-cflags="-O3 -fpic -DBLACKBERRY -DQNX -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -DCMP_HAVE_VFP -mfloat-abi=softfp -mfpu=neon -march=armv7 -mtune=cortex-a9" \
     --disable-shared \
     --enable-static \
     --extra-ldflags="-Wl,-rpath-link=$QNX_TARGET/armle-v7/usr/lib -L$QNX_TARGET/armle-v7/usr/lib" \

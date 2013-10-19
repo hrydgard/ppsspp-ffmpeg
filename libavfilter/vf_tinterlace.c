@@ -87,8 +87,10 @@ static enum AVPixelFormat full_scale_yuvj_pix_fmts[] = {
 static int query_formats(AVFilterContext *ctx)
 {
     static const enum AVPixelFormat pix_fmts[] = {
-        AV_PIX_FMT_YUV420P,  AV_PIX_FMT_YUV422P,  AV_PIX_FMT_YUV444P,
-        AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV410P,  AV_PIX_FMT_YUVA420P,
+        AV_PIX_FMT_YUV410P, AV_PIX_FMT_YUV411P,
+        AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P,
+        AV_PIX_FMT_YUV440P, AV_PIX_FMT_YUV444P,
+        AV_PIX_FMT_YUVA420P, AV_PIX_FMT_YUVA422P, AV_PIX_FMT_YUVA444P,
         AV_PIX_FMT_GRAY8, FULL_SCALE_YUVJ_FORMATS,
         AV_PIX_FMT_NONE
     };
@@ -114,6 +116,7 @@ static int config_out_props(AVFilterLink *outlink)
     TInterlaceContext *tinterlace = ctx->priv;
 
     tinterlace->vsub = desc->log2_chroma_h;
+    outlink->flags |= FF_LINK_FLAG_REQUEST_LOOP;
     outlink->w = inlink->w;
     outlink->h = tinterlace->mode == MODE_MERGE || tinterlace->mode == MODE_PAD ?
         inlink->h*2 : inlink->h;
@@ -130,7 +133,7 @@ static int config_out_props(AVFilterLink *outlink)
 
         /* fill black picture with black */
         for (i = 0; i < 4 && tinterlace->black_data[i]; i++) {
-            int h = i == 1 || i == 2 ? outlink->h >> desc->log2_chroma_h : outlink->h;
+            int h = i == 1 || i == 2 ? FF_CEIL_RSHIFT(outlink->h, desc->log2_chroma_h) : outlink->h;
             memset(tinterlace->black_data[i], black[i],
                    tinterlace->black_linesize[i] * h);
         }
@@ -175,7 +178,7 @@ void copy_picture_field(uint8_t *dst[4], int dst_linesize[4],
     int h, i;
 
     for (plane = 0; plane < desc->nb_components; plane++) {
-        int lines = plane == 1 || plane == 2 ? -((-src_h) >> vsub) : src_h;
+        int lines = plane == 1 || plane == 2 ? FF_CEIL_RSHIFT(src_h, vsub) : src_h;
         int linesize = av_image_get_linesize(format, w, plane);
         uint8_t *dstp = dst[plane];
         const uint8_t *srcp = src[plane];
@@ -201,7 +204,7 @@ void copy_picture_field(uint8_t *dst[4], int dst_linesize[4],
                 if (h == 1) srcp_below = srcp;     // there is no line below
                 for (i = 0; i < linesize; i++) {
                     // this calculation is an integer representation of
-                    // '0.5 * current + 0.25 * above + 0.25 + below'
+                    // '0.5 * current + 0.25 * above + 0.25 * below'
                     // '1 +' is for rounding. */
                     dstp[i] = (1 + srcp[i] + srcp[i] + srcp_above[i] + srcp_below[i]) >> 2;
                 }
@@ -351,21 +354,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
     return ret;
 }
 
-static int request_frame(AVFilterLink *outlink)
-{
-    TInterlaceContext *tinterlace = outlink->src->priv;
-    AVFilterLink *inlink = outlink->src->inputs[0];
-
-    do {
-        int ret;
-
-        if ((ret = ff_request_frame(inlink)) < 0)
-            return ret;
-    } while (!tinterlace->cur);
-
-    return 0;
-}
-
 static const AVFilterPad tinterlace_inputs[] = {
     {
         .name         = "default",
@@ -377,10 +365,9 @@ static const AVFilterPad tinterlace_inputs[] = {
 
 static const AVFilterPad tinterlace_outputs[] = {
     {
-        .name          = "default",
-        .type          = AVMEDIA_TYPE_VIDEO,
-        .config_props  = config_out_props,
-        .request_frame = request_frame,
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_out_props,
     },
     { NULL }
 };

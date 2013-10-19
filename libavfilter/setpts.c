@@ -221,24 +221,19 @@ static av_cold void uninit(AVFilterContext *ctx)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption options[] = {
     { "expr", "Expression determining the frame timestamp", OFFSET(expr_str), AV_OPT_TYPE_STRING, { .str = "PTS" }, .flags = FLAGS },
-    { NULL },
+    { NULL }
 };
 
 #if CONFIG_SETPTS_FILTER
-static const AVClass setpts_class = {
-    .class_name = "setpts",
-    .item_name  = av_default_item_name,
-    .option     = options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
+#define setpts_options options
+AVFILTER_DEFINE_CLASS(setpts);
 
 static const AVFilterPad avfilter_vf_setpts_inputs[] = {
     {
-        .name             = "default",
-        .type             = AVMEDIA_TYPE_VIDEO,
-        .get_video_buffer = ff_null_get_video_buffer,
-        .config_props     = config_input,
-        .filter_frame     = filter_frame,
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_input,
+        .filter_frame = filter_frame,
     },
     { NULL }
 };
@@ -267,20 +262,15 @@ AVFilter avfilter_vf_setpts = {
 
 #if CONFIG_ASETPTS_FILTER
 
-static const AVClass asetpts_class = {
-    .class_name = "asetpts",
-    .item_name  = av_default_item_name,
-    .option     = options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
+#define asetpts_options options
+AVFILTER_DEFINE_CLASS(asetpts);
 
 static const AVFilterPad asetpts_inputs[] = {
     {
-        .name             = "default",
-        .type             = AVMEDIA_TYPE_AUDIO,
-        .get_audio_buffer = ff_null_get_audio_buffer,
-        .config_props     = config_input,
-        .filter_frame     = filter_frame,
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_AUDIO,
+        .config_props = config_input,
+        .filter_frame = filter_frame,
     },
     { NULL }
 };

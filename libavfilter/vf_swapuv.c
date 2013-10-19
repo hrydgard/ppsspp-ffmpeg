@@ -54,7 +54,7 @@ static int is_planar_yuv(const AVPixFmtDescriptor *desc)
 {
     int i;
 
-    if (desc->flags & ~(PIX_FMT_BE | PIX_FMT_PLANAR | PIX_FMT_ALPHA) ||
+    if (desc->flags & ~(AV_PIX_FMT_FLAG_BE | AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_ALPHA) ||
         desc->nb_components < 3 ||
         (desc->comp[1].depth_minus1 != desc->comp[2].depth_minus1))
         return 0;
@@ -102,9 +102,8 @@ static const AVFilterPad swapuv_outputs[] = {
 };
 
 AVFilter avfilter_vf_swapuv = {
-    .name      = "swapuv",
-    .description = NULL_IF_CONFIG_SMALL("Swap U and V components."),
-    .priv_size = 0,
+    .name          = "swapuv",
+    .description   = NULL_IF_CONFIG_SMALL("Swap U and V components."),
     .query_formats = query_formats,
     .inputs        = swapuv_inputs,
     .outputs       = swapuv_outputs,

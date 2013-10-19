@@ -115,6 +115,12 @@ static const VideoSizeAbbr video_size_abbrs[] = {
     { "4k",       4096,2160 }, /* Digital Cinema System Specification */
     { "4kflat",   3996,2160 },
     { "4kscope",  4096,1716 },
+    { "nhd",       640,360  },
+    { "hqvga",     240,160  },
+    { "wqvga",     400,240  },
+    { "fwqvga",    432,240  },
+    { "hvga",      480,320  },
+    { "qhd",       960,540  },
 };
 
 static const VideoRateAbbr video_rate_abbrs[]= {
@@ -824,13 +830,13 @@ int main(void)
         time_t tvi;
         struct tm *tm;
         static char tzstr[] = "TZ=CET-1";
-        const char *time_string[] = {
+        static const char * const time_string[] = {
             "now",
             "12:35:46",
             "2000-12-20 0:02:47.5z",
             "2000-12-20T010247.6",
         };
-        const char *duration_string[] = {
+        static const char * const duration_string[] = {
             "2:34:56.79",
             "-1:23:45.67",
             "42.1729",

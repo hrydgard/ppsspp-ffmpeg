@@ -593,7 +593,7 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                 coeffs[ch] = cpe->ch[ch].coeffs;
             s->psy.model->analyze(&s->psy, start_ch, coeffs, wi);
             for (ch = 0; ch < chans; ch++) {
-                s->cur_channel = start_ch * 2 + ch;
+                s->cur_channel = start_ch + ch;
                 s->coder->search_for_quantizers(avctx, s, &cpe->ch[ch], s->lambda);
             }
             cpe->common_window = 0;
@@ -609,7 +609,7 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                     }
                 }
             }
-            s->cur_channel = start_ch * 2;
+            s->cur_channel = start_ch;
             if (s->options.stereo_mode && cpe->common_window) {
                 if (s->options.stereo_mode > 0) {
                     IndividualChannelStream *ics = &cpe->ch[0].ics;
@@ -791,7 +791,11 @@ static const AVOption aacenc_options[] = {
         {"auto",     "Selected by the Encoder", 0, AV_OPT_TYPE_CONST, {.i64 = -1 }, INT_MIN, INT_MAX, AACENC_FLAGS, "stereo_mode"},
         {"ms_off",   "Disable Mid/Side coding", 0, AV_OPT_TYPE_CONST, {.i64 =  0 }, INT_MIN, INT_MAX, AACENC_FLAGS, "stereo_mode"},
         {"ms_force", "Force Mid/Side for the whole frame if possible", 0, AV_OPT_TYPE_CONST, {.i64 =  1 }, INT_MIN, INT_MAX, AACENC_FLAGS, "stereo_mode"},
-    {"aac_coder", "", offsetof(AACEncContext, options.aac_coder), AV_OPT_TYPE_INT, {.i64 = 2}, 0, AAC_CODER_NB-1, AACENC_FLAGS},
+    {"aac_coder", "", offsetof(AACEncContext, options.aac_coder), AV_OPT_TYPE_INT, {.i64 = AAC_CODER_TWOLOOP}, 0, AAC_CODER_NB-1, AACENC_FLAGS, "aac_coder"},
+        {"faac",     "FAAC-inspired method",      0, AV_OPT_TYPE_CONST, {.i64 = AAC_CODER_FAAC},    INT_MIN, INT_MAX, AACENC_FLAGS, "aac_coder"},
+        {"anmr",     "ANMR method",               0, AV_OPT_TYPE_CONST, {.i64 = AAC_CODER_ANMR},    INT_MIN, INT_MAX, AACENC_FLAGS, "aac_coder"},
+        {"twoloop",  "Two loop searching method", 0, AV_OPT_TYPE_CONST, {.i64 = AAC_CODER_TWOLOOP}, INT_MIN, INT_MAX, AACENC_FLAGS, "aac_coder"},
+        {"fast",     "Constant quantizer",        0, AV_OPT_TYPE_CONST, {.i64 = AAC_CODER_FAST},    INT_MIN, INT_MAX, AACENC_FLAGS, "aac_coder"},
     {NULL}
 };
 
@@ -811,6 +815,7 @@ static const int mpeg4audio_sample_rates[16] = {
 
 AVCodec ff_aac_encoder = {
     .name           = "aac",
+    .long_name      = NULL_IF_CONFIG_SMALL("AAC (Advanced Audio Coding)"),
     .type           = AVMEDIA_TYPE_AUDIO,
     .id             = AV_CODEC_ID_AAC,
     .priv_data_size = sizeof(AACEncContext),
@@ -822,6 +827,5 @@ AVCodec ff_aac_encoder = {
                       CODEC_CAP_EXPERIMENTAL,
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_FLTP,
                                                      AV_SAMPLE_FMT_NONE },
-    .long_name      = NULL_IF_CONFIG_SMALL("AAC (Advanced Audio Coding)"),
     .priv_class     = &aacenc_class,
 };

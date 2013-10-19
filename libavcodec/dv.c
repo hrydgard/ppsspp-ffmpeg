@@ -351,11 +351,6 @@ static av_cold int dvvideo_init_encoder(AVCodecContext *avctx)
 static const int vs_total_ac_bits = (100 * 4 + 68*2) * 5;
 static const int mb_area_start[5] = { 1, 6, 21, 43, 64 };
 
-static inline int put_bits_left(PutBitContext* s)
-{
-    return (s->buf_end - s->buf) * 8 - put_bits_count(s);
-}
-
 #if CONFIG_SMALL
 /* Converts run and level (where level != 0) pair into VLC, returning bit size */
 static av_always_inline int dv_rl2vlc(int run, int level, int sign, uint32_t* vlc)
@@ -556,7 +551,7 @@ static av_always_inline int dv_init_enc_block(EncBlockInfo* bi, uint8_t *data, i
 
           if (level + 15 > 30U) {
               bi->sign[i] = (level >> 31) & 1;
-              /* weight it and and shift down into range, adding for rounding */
+              /* weight it and shift down into range, adding for rounding */
               /* the extra division by a factor of 2^4 reverses the 8x expansion of the DCT
                  AND the 2x doubling of the weights */
               level = (FFABS(level) * weight[i] + (1 << (dv_weight_bits+3))) >> (dv_weight_bits+4);
@@ -989,6 +984,7 @@ static int dvvideo_encode_frame(AVCodecContext *c, AVPacket *pkt,
 
 AVCodec ff_dvvideo_encoder = {
     .name           = "dvvideo",
+    .long_name      = NULL_IF_CONFIG_SMALL("DV (Digital Video)"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_DVVIDEO,
     .priv_data_size = sizeof(DVVideoContext),
@@ -998,6 +994,5 @@ AVCodec ff_dvvideo_encoder = {
     .pix_fmts       = (const enum AVPixelFormat[]) {
         AV_PIX_FMT_YUV411P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE
     },
-    .long_name      = NULL_IF_CONFIG_SMALL("DV (Digital Video)"),
 };
 #endif // CONFIG_DVVIDEO_ENCODER
