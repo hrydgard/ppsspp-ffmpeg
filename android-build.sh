@@ -110,3 +110,4 @@ make install
 
 build_ARMv6
 build_ARMv7
+echo Android ARM builds finished
