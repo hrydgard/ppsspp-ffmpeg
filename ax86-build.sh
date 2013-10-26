@@ -12,6 +12,7 @@ GENERAL="\
    --nm=$PREBUILT/bin/i686-linux-android-nm"
 
 MODULES="\
+   --disable-avdevice \
    --disable-filters \
    --disable-programs \
    --disable-network \

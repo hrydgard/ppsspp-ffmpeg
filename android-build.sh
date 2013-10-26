@@ -13,6 +13,7 @@ GENERAL="\
    --nm=$PREBUILT/bin/arm-linux-androideabi-nm"
 
 MODULES="\
+   --disable-avdevice \
    --disable-filters \
    --disable-programs \
    --disable-network \

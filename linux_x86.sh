@@ -10,6 +10,7 @@ GENERAL="
 	 --enable-static"
 
 MODULES="\
+   --disable-avdevice \
    --disable-filters \
    --disable-programs \
    --disable-network \

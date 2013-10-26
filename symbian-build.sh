@@ -23,6 +23,7 @@ GENERAL="\
    --nm=$COMPILERROOT/bin/arm-none-symbianelf-nm"
 
 MODULES="\
+   --disable-avdevice \
    --disable-filters \
    --disable-programs \
    --disable-network \
@@ -79,14 +80,12 @@ PARSERS="\
     --disable-shared \
     --enable-static \
     --extra-ldflags="-Wl,-rpath-link=$EPOCLIB/lib -L$EPOCLIB/lib -L$EPOCLIB/urel -L$COMPILERROOT/arm-none-symbianelf/lib -nostdlib" \
-    --enable-zlib \
     --disable-everything \
     ${MODULES} \
     ${VIDEO_DECODERS} \
     ${AUDIO_DECODERS} \
     ${DEMUXERS} \
     ${PARSERS} \
-    --disable-neon
-
-make clean
+    --disable-neon && \
+make clean && \
 make install && for i in symbian/armv6/lib/*.a;	do j=`echo $i | cut -d . -f 1 | cut -c22-`".lib"; mv $i symbian/armv6/lib/$j; done

@@ -4178,6 +4178,8 @@ if ! disabled pthreads && ! enabled w32threads && ! enabled os2threads; then
     enable pthreads
     if check_func pthread_create; then
         :
+    elif test $target_os = "symbian"; then
+        :
     elif check_func pthread_create -pthread; then
         add_cflags -pthread
         add_extralibs -pthread

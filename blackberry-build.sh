@@ -16,6 +16,7 @@ GENERAL="\
    --nm=arm-unknown-nto-qnx8.0.0eabi-nm"
 
 MODULES="\
+   --disable-avdevice \
    --disable-filters \
    --disable-programs \
    --disable-network \
@@ -79,8 +80,7 @@ PARSERS="\
     ${VIDEO_DECODERS} \
     ${AUDIO_DECODERS} \
     ${DEMUXERS} \
-    ${PARSERS}
-
-make clean
+    ${PARSERS} && \
+make clean && \
 make install
 
