@@ -2713,7 +2713,10 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
     for(i=0;i<ic->nb_streams;i++) {
         const AVCodec *codec;
+        // HACK: Disable thread_opt on Blackberry to prevent crashing in every game until we figure out why this is happening.
+#ifndef BLACKBERRY
         AVDictionary *thread_opt = NULL;
+#endif
         st = ic->streams[i];
 
         if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO ||
@@ -2742,22 +2745,33 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
         /* force thread count to 1 since the h264 decoder will not extract SPS
          *  and PPS to extradata during multi-threaded decoding */
+#ifndef BLACKBERRY
         av_dict_set(options ? &options[i] : &thread_opt, "threads", "1", 0);
+#endif
 
         /* Ensure that subtitle_header is properly set. */
         if (st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE
             && codec && !st->codec->codec)
             avcodec_open2(st->codec, codec, options ? &options[i]
+#ifndef BLACKBERRY
                               : &thread_opt);
+#else
+                              : NULL);
+#endif
 
         //try to just open decoders, in case this is enough to get parameters
         if (!has_codec_parameters(st, NULL) && st->request_probe <= 0) {
             if (codec && !st->codec->codec)
                 avcodec_open2(st->codec, codec, options ? &options[i]
+#ifndef BLACKBERRY
                               : &thread_opt);
         }
         if (!options)
             av_dict_free(&thread_opt);
+#else
+                              : NULL);
+        }
+#endif
     }
 
     for (i=0; i<ic->nb_streams; i++) {
