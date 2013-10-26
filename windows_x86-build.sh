@@ -30,6 +30,7 @@ GENERAL="
 #    --cpu=opteron-sse3
 #    --extra-ldflags="-lz"
 #    --optflags=""
+    --disable-avdevice
     --disable-programs
     --disable-avfilter
     --disable-postproc
