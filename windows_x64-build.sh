@@ -239,7 +239,7 @@ params_dump PARAMS
 
 
 echo "---- configure ----"
-./configure --extra-cflags="-MD -IWindowsInclude" $PARAMS
+./configure --extra-cflags="-MD -IWindowsInclude -GS-" $PARAMS
 
 echo "---- make clean ----"
 make clean
