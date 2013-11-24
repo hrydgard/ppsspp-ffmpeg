@@ -6,7 +6,8 @@ A private copy of FFMPEG used in PPSSPP.
 Building
 ========
 
-If on Mac, iOS, or Linux, just run the corresponding build script (if it's written...)
+If on Mac, iOS, Blackberry, Symbian or Linux, just run the corresponding build script
+If you are on an ARM Linux device, modify the ARCH used in the Linux script first.
 
 
 If on Windows and building for Windows, use these instructions:
