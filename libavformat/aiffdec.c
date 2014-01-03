@@ -141,6 +141,8 @@ static unsigned int get_aiff_header(AVFormatContext *s, int size,
         case AV_CODEC_ID_MACE3:
             codec->block_align = 2*codec->channels;
             break;
+        case AV_CODEC_ID_ADPCM_G726LE:
+            codec->bits_per_coded_sample = 5;
         case AV_CODEC_ID_ADPCM_G722:
         case AV_CODEC_ID_MACE6:
             codec->block_align = 1*codec->channels;
@@ -276,9 +278,8 @@ static int aiff_read_header(AVFormatContext *s)
         case MKTAG('w', 'a', 'v', 'e'):
             if ((uint64_t)size > (1<<30))
                 return -1;
-            if (ff_alloc_extradata(st->codec, size))
+            if (ff_get_extradata(st->codec, pb, size) < 0)
                 return AVERROR(ENOMEM);
-            avio_read(pb, st->codec->extradata, size);
             if (st->codec->codec_id == AV_CODEC_ID_QDM2 && size>=12*4 && !st->codec->block_align) {
                 st->codec->block_align = AV_RB32(st->codec->extradata+11*4);
                 aiff->block_duration = AV_RB32(st->codec->extradata+9*4);

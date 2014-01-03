@@ -306,9 +306,11 @@ static int decode_frame(AVCodecContext *avctx, void *data,
         buf = av_realloc(s->packet_buffer, avpkt->size + FF_INPUT_BUFFER_PADDING_SIZE);
         if (!buf)
             return AVERROR(ENOMEM);
+        memset(buf + avpkt->size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
         s->packet_buffer = buf;
         memcpy(s->packet_buffer, avpkt->data, avpkt->size);
-        init_get_bits(gb, s->packet_buffer, avpkt->size * 8);
+        if ((ret = init_get_bits8(gb, s->packet_buffer, avpkt->size)) < 0)
+            return ret;
         consumed = avpkt->size;
 
         /* skip reported size */

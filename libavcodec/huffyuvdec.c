@@ -256,7 +256,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
     ff_huffyuv_common_init(avctx);
     memset(s->vlc, 0, 3 * sizeof(VLC));
 
-    avcodec_get_frame_defaults(&s->picture);
     s->interlaced = s->height > 288;
 
     s->bgr32 = 1;
@@ -407,6 +406,9 @@ static void decode_422_bitstream(HYuvContext *s, int count)
             READ_2PIX(s->temp[0][2 * i    ], s->temp[1][i], 1);
             READ_2PIX(s->temp[0][2 * i + 1], s->temp[2][i], 2);
         }
+        for (; i < count; i++)
+            s->temp[0][2 * i    ] = s->temp[1][i] =
+            s->temp[0][2 * i + 1] = s->temp[2][i] = 128;
     } else {
         for (i = 0; i < count; i++) {
             READ_2PIX(s->temp[0][2 * i    ], s->temp[1][i], 1);

@@ -44,7 +44,6 @@
 #include "internal.h"
 #include "atrac.h"
 #include "atrac3plus.h"
-#include "atrac3plus_data.h"
 
 typedef struct ATRAC3PContext {
     GetBitContext gb;
@@ -66,7 +65,7 @@ typedef struct ATRAC3PContext {
     uint64_t my_channel_layout; ///< current channel layout
 } ATRAC3PContext;
 
-static av_cold int decode_close(AVCodecContext *avctx)
+static av_cold int atrac3p_decode_close(AVCodecContext *avctx)
 {
     av_free(((ATRAC3PContext *)(avctx->priv_data))->ch_units);
 
@@ -131,7 +130,7 @@ static av_cold int set_channel_params(ATRAC3PContext *ctx,
     return 0;
 }
 
-static av_cold int decode_init(AVCodecContext *avctx)
+static av_cold int atrac3p_decode_init(AVCodecContext *avctx)
 {
     ATRAC3PContext *ctx = avctx->priv_data;
     int i, ch, ret;
@@ -157,7 +156,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     ctx->ch_units = av_mallocz(sizeof(*ctx->ch_units) *
                                ctx->num_channel_blocks);
     if (!ctx->ch_units) {
-        decode_close(avctx);
+        atrac3p_decode_close(avctx);
         return AVERROR(ENOMEM);
     }
 
@@ -170,14 +169,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
             ctx->ch_units[i].channels[ch].gain_data_prev  = &ctx->ch_units[i].channels[ch].gain_data_hist[1][0];
             ctx->ch_units[i].channels[ch].tones_info      = &ctx->ch_units[i].channels[ch].tones_info_hist[0][0];
             ctx->ch_units[i].channels[ch].tones_info_prev = &ctx->ch_units[i].channels[ch].tones_info_hist[1][0];
-
-            /* clear IMDCT overlapping buffer */
-            memset(&ctx->ch_units[i].prev_buf[ch][0], 0,
-                   sizeof(ctx->ch_units[i].prev_buf[ch][0]) *
-                   ATRAC3P_FRAME_SAMPLES);
-            /* clear IPQF history */
-            memset(&ctx->ch_units[i].ipqf_ctx[ch], 0,
-                   sizeof(ctx->ch_units[i].ipqf_ctx[ch]));
         }
 
         ctx->ch_units[i].waves_info      = &ctx->ch_units[i].wave_synth_hist[0];
@@ -195,11 +186,16 @@ static void decode_residual_spectrum(Atrac3pChanUnitCtx *ctx,
                                      AVCodecContext *avctx)
 {
     int i, sb, ch, qu, nspeclines, RNG_index;
-    DECLARE_ALIGNED(32, float, tmp)[ATRAC3P_SUBBAND_SAMPLES];
     float *dst, q;
     int16_t *src;
     /* calculate RNG table index for each subband */
     int sb_RNG_index[ATRAC3P_SUBBANDS] = { 0 };
+
+    if (ctx->mute_flag) {
+        for (ch = 0; ch < num_channels; ch++)
+            memset(out[ch], 0, ATRAC3P_FRAME_SAMPLES * sizeof(*out[ch]));
+        return;
+    }
 
     for (qu = 0, RNG_index = 0; qu < ctx->used_quant_units; qu++)
         RNG_index += ctx->channels[0].qu_sf_idx[qu] +
@@ -235,15 +231,9 @@ static void decode_residual_spectrum(Atrac3pChanUnitCtx *ctx,
     if (ctx->unit_type == CH_UNIT_STEREO) {
         for (sb = 0; sb < ctx->num_coded_subbands; sb++) {
             if (ctx->swap_channels[sb]) {
-                memcpy(tmp, &out[0][sb * ATRAC3P_SUBBAND_SAMPLES],
-                       ATRAC3P_SUBBAND_SAMPLES * sizeof(*tmp));
-                memcpy(&out[0][sb * ATRAC3P_SUBBAND_SAMPLES],
-                       &out[1][sb * ATRAC3P_SUBBAND_SAMPLES],
-                       ATRAC3P_SUBBAND_SAMPLES *
-                       sizeof(out[0][sb * ATRAC3P_SUBBAND_SAMPLES]));
-                memcpy(&out[1][sb * ATRAC3P_SUBBAND_SAMPLES], tmp,
-                       ATRAC3P_SUBBAND_SAMPLES *
-                       sizeof(out[1][sb * ATRAC3P_SUBBAND_SAMPLES]));
+                for (i = 0; i < ATRAC3P_SUBBAND_SAMPLES; i++)
+                    FFSWAP(float, out[0][sb * ATRAC3P_SUBBAND_SAMPLES + i],
+                                  out[1][sb * ATRAC3P_SUBBAND_SAMPLES + i]);
             }
 
             /* flip coefficients' sign if requested */
@@ -252,10 +242,6 @@ static void decode_residual_spectrum(Atrac3pChanUnitCtx *ctx,
                     out[1][sb * ATRAC3P_SUBBAND_SAMPLES + i] = -(out[1][sb * ATRAC3P_SUBBAND_SAMPLES + i]);
         }
     }
-
-    if (ctx->mute_flag)
-        for (ch = 0; ch < num_channels; ch++)
-            memset(out[ch], 0, ATRAC3P_FRAME_SAMPLES * sizeof(*out[ch]));
 }
 
 static void reconstruct_frame(ATRAC3PContext *ctx, Atrac3pChanUnitCtx *ch_unit,
@@ -323,8 +309,8 @@ static void reconstruct_frame(ATRAC3PContext *ctx, Atrac3pChanUnitCtx *ch_unit,
     FFSWAP(Atrac3pWaveSynthParams *, ch_unit->waves_info, ch_unit->waves_info_prev);
 }
 
-static int decode_frame(AVCodecContext *avctx, void *data,
-                        int *got_frame_ptr, AVPacket *avpkt)
+static int atrac3p_decode_frame(AVCodecContext *avctx, void *data,
+                                int *got_frame_ptr, AVPacket *avpkt)
 {
     ATRAC3PContext *ctx = avctx->priv_data;
     AVFrame *frame      = data;
@@ -382,7 +368,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
 
     *got_frame_ptr = 1;
 
-    return avpkt->size;
+    return avctx->block_align;
 }
 
 AVCodec ff_atrac3p_decoder = {
@@ -391,7 +377,7 @@ AVCodec ff_atrac3p_decoder = {
     .type           = AVMEDIA_TYPE_AUDIO,
     .id             = AV_CODEC_ID_ATRAC3P,
     .priv_data_size = sizeof(ATRAC3PContext),
-    .init           = decode_init,
-    .close          = decode_close,
-    .decode         = decode_frame,
+    .init           = atrac3p_decode_init,
+    .close          = atrac3p_decode_close,
+    .decode         = atrac3p_decode_frame,
 };

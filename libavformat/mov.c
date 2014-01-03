@@ -24,6 +24,7 @@
  */
 
 #include <limits.h>
+#include <stdint.h>
 
 //#define MOV_EXPORT_ALL_METADATA
 
@@ -536,7 +537,8 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                     dref->dir = av_malloc(len+1);
                     if (!dref->dir)
                         return AVERROR(ENOMEM);
-                    avio_read(pb, dref->dir, len);
+                    if (avio_read(pb, dref->dir, len) != len)
+                        return AVERROR_INVALIDDATA;
                     dref->dir[len] = 0;
                     for (j = 0; j < len; j++)
                         if (dref->dir[j] == ':')
@@ -1001,7 +1003,14 @@ static int mov_read_extradata(MOVContext *c, AVIOContext *pb, MOVAtom atom,
     st->codec->extradata_size= size - FF_INPUT_BUFFER_PADDING_SIZE;
     AV_WB32(       buf    , atom.size + 8);
     AV_WL32(       buf + 4, atom.type);
-    avio_read(pb, buf + 8, atom.size);
+    err = avio_read(pb, buf + 8, atom.size);
+    if (err < 0) {
+        return err;
+    } else if (err < atom.size) {
+        av_log(c->fc, AV_LOG_WARNING, "truncated extradata\n");
+        st->codec->extradata_size -= atom.size - err;
+    }
+    memset(buf + 8 + err, 0, FF_INPUT_BUFFER_PADDING_SIZE);
     return 0;
 }
 
@@ -1042,15 +1051,17 @@ static int mov_read_targa_y216(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
 static int mov_read_ares(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
-    AVCodecContext *codec = c->fc->streams[c->fc->nb_streams-1]->codec;
-    if (codec->codec_tag == MKTAG('A', 'V', 'i', 'n') &&
-        codec->codec_id == AV_CODEC_ID_H264 &&
-        atom.size > 11) {
-        avio_skip(pb, 10);
-        /* For AVID AVCI50, force width of 1440 to be able to select the correct SPS and PPS */
-        if (avio_rb16(pb) == 0xd4d)
-            codec->width = 1440;
-        return 0;
+    if (c->fc->nb_streams >= 1) {
+        AVCodecContext *codec = c->fc->streams[c->fc->nb_streams-1]->codec;
+        if (codec->codec_tag == MKTAG('A', 'V', 'i', 'n') &&
+            codec->codec_id == AV_CODEC_ID_H264 &&
+            atom.size > 11) {
+            avio_skip(pb, 10);
+            /* For AVID AVCI50, force width of 1440 to be able to select the correct SPS and PPS */
+            if (avio_rb16(pb) == 0xd4d)
+                codec->width = 1440;
+            return 0;
+        }
     }
 
     return mov_read_avid(c, pb, atom);
@@ -1077,9 +1088,8 @@ static int mov_read_wave(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         st->codec->codec_id == AV_CODEC_ID_SPEEX) {
         // pass all frma atom to codec, needed at least for QDMC and QDM2
         av_free(st->codec->extradata);
-        if (ff_alloc_extradata(st->codec, atom.size))
+        if (ff_get_extradata(st->codec, pb, atom.size) < 0)
             return AVERROR(ENOMEM);
-        avio_read(pb, st->codec->extradata, atom.size);
     } else if (atom.size > 8) { /* to read frma, esds atoms */
         int ret;
         if ((ret = mov_read_default(c, pb, atom)) < 0)
@@ -1114,9 +1124,9 @@ static int mov_read_glbl(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             return mov_read_default(c, pb, atom);
     }
     av_free(st->codec->extradata);
-    if (ff_alloc_extradata(st->codec, atom.size))
+    if (ff_get_extradata(st->codec, pb, atom.size) < 0)
         return AVERROR(ENOMEM);
-    avio_read(pb, st->codec->extradata, atom.size);
+
     return 0;
 }
 
@@ -1124,6 +1134,7 @@ static int mov_read_dvc1(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     AVStream *st;
     uint8_t profile_level;
+    int ret;
 
     if (c->fc->nb_streams < 1)
         return 0;
@@ -1136,11 +1147,11 @@ static int mov_read_dvc1(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if ((profile_level & 0xf0) != 0xc0)
         return 0;
 
-    av_free(st->codec->extradata);
-    if (ff_alloc_extradata(st->codec, atom.size - 7))
-        return AVERROR(ENOMEM);
     avio_seek(pb, 6, SEEK_CUR);
-    avio_read(pb, st->codec->extradata, st->codec->extradata_size);
+    av_free(st->codec->extradata);
+    if ((ret = ff_get_extradata(st->codec, pb, atom.size - 7)) < 0)
+        return ret;
+
     return 0;
 }
 
@@ -1162,11 +1173,10 @@ static int mov_read_strf(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if ((uint64_t)atom.size > (1<<30))
         return AVERROR_INVALIDDATA;
 
-    av_free(st->codec->extradata);
-    if (ff_alloc_extradata(st->codec, atom.size - 40))
-        return AVERROR(ENOMEM);
     avio_skip(pb, 40);
-    avio_read(pb, st->codec->extradata, atom.size - 40);
+    av_free(st->codec->extradata);
+    if (ff_get_extradata(st->codec, pb, atom.size - 40) < 0)
+        return AVERROR(ENOMEM);
     return 0;
 }
 
@@ -1305,6 +1315,9 @@ static void mov_parse_stsd_video(MOVContext *c, AVIOContext *pb,
     /* figure out the palette situation */
     color_depth     = st->codec->bits_per_coded_sample & 0x1F;
     color_greyscale = st->codec->bits_per_coded_sample & 0x20;
+    /* Do not create a greyscale palette for cinepak */
+    if (color_greyscale && st->codec->codec_id == AV_CODEC_ID_CINEPAK)
+        return;
 
     /* if the depth is 2, 4, or 8 bpp, file is palettized */
     if ((color_depth == 2) || (color_depth == 4) || (color_depth == 8)) {
@@ -1315,14 +1328,10 @@ static void mov_parse_stsd_video(MOVContext *c, AVIOContext *pb,
         if (color_greyscale) {
             int color_index, color_dec;
             /* compute the greyscale palette */
-            st->codec->bits_per_coded_sample = color_depth;
             color_count = 1 << color_depth;
             color_index = 255;
             color_dec   = 256 / (color_count - 1);
             for (j = 0; j < color_count; j++) {
-                if (st->codec->codec_id == AV_CODEC_ID_CINEPAK){
-                    r = g = b = color_count - 1 - color_index;
-                } else
                 r = g = b = color_index;
                 sc->palette[j] = (0xFFU << 24) | (r << 16) | (g << 8) | (b);
                 color_index -= color_dec;
@@ -1479,9 +1488,8 @@ static int mov_parse_stsd_data(MOVContext *c, AVIOContext *pb,
                                 int size)
 {
     if (st->codec->codec_tag == MKTAG('t','m','c','d')) {
-        if (ff_alloc_extradata(st->codec, size))
+        if (ff_get_extradata(st->codec, pb, size) < 0)
             return AVERROR(ENOMEM);
-        avio_read(pb, st->codec->extradata, size);
         if (size > 16) {
             MOVStreamContext *tmcd_ctx = st->priv_data;
             int val;
@@ -1779,7 +1787,7 @@ static int mov_read_stss(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if (!entries)
     {
         sc->keyframe_absent = 1;
-        if (!st->need_parsing)
+        if (!st->need_parsing && st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
             st->need_parsing = AVSTREAM_PARSE_HEADERS;
         return 0;
     }
@@ -2156,6 +2164,8 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
                     av_dlog(mov->fc, "AVIndex stream %d, sample %d, offset %"PRIx64", dts %"PRId64", "
                             "size %d, distance %d, keyframe %d\n", st->index, current_sample,
                             current_offset, current_dts, sample_size, distance, keyframe);
+                    if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO && st->nb_index_entries < 100)
+                        ff_rfps_add_frame(mov->fc, st, current_dts);
                 }
 
                 current_offset += sample_size;
@@ -2387,8 +2397,10 @@ static int mov_read_trak(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     // done for ai5q, ai52, ai55, ai1q, ai12 and ai15.
     if (!st->codec->extradata_size && st->codec->codec_id == AV_CODEC_ID_H264 &&
-        st->codec->codec_tag != MKTAG('a', 'v', 'c', '1')) {
-        ff_generate_avci_extradata(st);
+        TAG_IS_AVCI(st->codec->codec_tag)) {
+        ret = ff_generate_avci_extradata(st);
+        if (ret < 0)
+            return ret;
     }
 
     switch (st->codec->codec_id) {
@@ -3404,6 +3416,8 @@ static int mov_read_header(AVFormatContext *s)
             s->streams[i]->codec->bit_rate = mov->bitrates[i];
         }
     }
+
+    ff_rfps_calculate(s);
 
     return 0;
 }

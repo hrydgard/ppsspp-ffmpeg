@@ -157,11 +157,16 @@ static void open_audio(AVFormatContext *oc, AVCodec *codec, AVStream *st)
         10000 : c->frame_size;
 
     ret = av_samples_alloc_array_and_samples(&src_samples_data, &src_samples_linesize, c->channels,
-                                             src_nb_samples, c->sample_fmt, 0);
+                                             src_nb_samples, AV_SAMPLE_FMT_S16, 0);
     if (ret < 0) {
         fprintf(stderr, "Could not allocate source samples\n");
         exit(1);
     }
+
+    /* compute the number of converted samples: buffering is avoided
+     * ensuring that the output buffer will contain at least all the
+     * converted input samples */
+    max_dst_nb_samples = src_nb_samples;
 
     /* create resampler context */
     if (c->sample_fmt != AV_SAMPLE_FMT_S16) {
@@ -184,17 +189,15 @@ static void open_audio(AVFormatContext *oc, AVCodec *codec, AVStream *st)
             fprintf(stderr, "Failed to initialize the resampling context\n");
             exit(1);
         }
-    }
 
-    /* compute the number of converted samples: buffering is avoided
-     * ensuring that the output buffer will contain at least all the
-     * converted input samples */
-    max_dst_nb_samples = src_nb_samples;
-    ret = av_samples_alloc_array_and_samples(&dst_samples_data, &dst_samples_linesize, c->channels,
-                                             max_dst_nb_samples, c->sample_fmt, 0);
-    if (ret < 0) {
-        fprintf(stderr, "Could not allocate destination samples\n");
-        exit(1);
+        ret = av_samples_alloc_array_and_samples(&dst_samples_data, &dst_samples_linesize, c->channels,
+                                                 max_dst_nb_samples, c->sample_fmt, 0);
+        if (ret < 0) {
+            fprintf(stderr, "Could not allocate destination samples\n");
+            exit(1);
+        }
+    } else {
+        dst_samples_data = src_samples_data;
     }
     dst_samples_size = av_samples_get_buffer_size(NULL, c->channels, max_dst_nb_samples,
                                                   c->sample_fmt, 0);
@@ -221,7 +224,7 @@ static void write_audio_frame(AVFormatContext *oc, AVStream *st)
 {
     AVCodecContext *c;
     AVPacket pkt = { 0 }; // data and size must be 0;
-    AVFrame *frame = avcodec_alloc_frame();
+    AVFrame *frame = av_frame_alloc();
     int got_packet, ret, dst_nb_samples;
 
     av_init_packet(&pkt);
@@ -254,7 +257,6 @@ static void write_audio_frame(AVFormatContext *oc, AVStream *st)
             exit(1);
         }
     } else {
-        dst_samples_data[0] = src_samples_data[0];
         dst_nb_samples = src_nb_samples;
     }
 
@@ -269,7 +271,7 @@ static void write_audio_frame(AVFormatContext *oc, AVStream *st)
     }
 
     if (!got_packet)
-        return;
+        goto freeframe;
 
     pkt.stream_index = st->index;
 
@@ -280,14 +282,19 @@ static void write_audio_frame(AVFormatContext *oc, AVStream *st)
                 av_err2str(ret));
         exit(1);
     }
-    avcodec_free_frame(&frame);
+freeframe:
+    av_frame_free(&frame);
 }
 
 static void close_audio(AVFormatContext *oc, AVStream *st)
 {
     avcodec_close(st->codec);
+    if (dst_samples_data != src_samples_data) {
+        av_free(dst_samples_data[0]);
+        av_free(dst_samples_data);
+    }
     av_free(src_samples_data[0]);
-    av_free(dst_samples_data[0]);
+    av_free(src_samples_data);
 }
 
 /**************************************************************/
@@ -310,7 +317,7 @@ static void open_video(AVFormatContext *oc, AVCodec *codec, AVStream *st)
     }
 
     /* allocate and init a re-usable frame */
-    frame = avcodec_alloc_frame();
+    frame = av_frame_alloc();
     if (!frame) {
         fprintf(stderr, "Could not allocate video frame\n");
         exit(1);

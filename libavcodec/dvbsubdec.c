@@ -34,8 +34,6 @@
 #define cm (ff_cropTbl + MAX_NEG_CROP)
 
 #ifdef DEBUG
-#undef fprintf
-#undef perror
 #if 0
 static void png_save(const char *filename, uint8_t *bitmap, int w, int h,
                      uint32_t *rgba_palette)
@@ -1359,8 +1357,8 @@ static void dvbsub_parse_display_definition_segment(AVCodecContext *avctx,
 
     if (info_byte & 1<<3) { // display_window_flag
         display_def->x = bytestream_get_be16(&buf);
-        display_def->y = bytestream_get_be16(&buf);
         display_def->width  = bytestream_get_be16(&buf) - display_def->x + 1;
+        display_def->y = bytestream_get_be16(&buf);
         display_def->height = bytestream_get_be16(&buf) - display_def->y + 1;
     }
 }

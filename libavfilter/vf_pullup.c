@@ -126,6 +126,22 @@ static int alloc_metrics(PullupContext *s, PullupField *f)
     return 0;
 }
 
+static void free_field_queue(PullupField *head, PullupField **last)
+{
+    PullupField *f = head;
+    while (f) {
+        av_free(f->diffs);
+        av_free(f->combs);
+        av_free(f->vars);
+        if (f == *last) {
+            av_freep(last);
+            break;
+        }
+        f = f->next;
+        av_freep(&f->prev);
+    };
+}
+
 static PullupField *make_field_queue(PullupContext *s, int len)
 {
     PullupField *head, *f;
@@ -141,13 +157,17 @@ static PullupField *make_field_queue(PullupContext *s, int len)
 
     for (; len > 0; len--) {
         f->next = av_mallocz(sizeof(*f->next));
-        if (!f->next)
+        if (!f->next) {
+            free_field_queue(head, &f);
             return NULL;
+        }
 
         f->next->prev = f;
         f = f->next;
-        if (alloc_metrics(s, f) < 0)
+        if (alloc_metrics(s, f) < 0) {
+            free_field_queue(head, &f);
             return NULL;
+        }
     }
 
     f->next = head;
@@ -714,21 +734,9 @@ end:
 static av_cold void uninit(AVFilterContext *ctx)
 {
     PullupContext *s = ctx->priv;
-    PullupField *f;
     int i;
 
-    f = s->head;
-    while (f) {
-        av_free(f->diffs);
-        av_free(f->combs);
-        av_free(f->vars);
-        if (f == s->last) {
-            av_freep(&s->last);
-            break;
-        }
-        f = f->next;
-        av_freep(&f->prev);
-    };
+    free_field_queue(s->head, &s->last);
 
     for (i = 0; i < FF_ARRAY_ELEMS(s->buffers); i++) {
         av_freep(&s->buffers[i].planes[0]);
@@ -756,7 +764,7 @@ static const AVFilterPad pullup_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vf_pullup = {
+AVFilter ff_vf_pullup = {
     .name          = "pullup",
     .description   = NULL_IF_CONFIG_SMALL("Pullup from field sequence to frames."),
     .priv_size     = sizeof(PullupContext),

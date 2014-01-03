@@ -31,6 +31,7 @@
 #include "libavutil/imgutils.h"
 #include "avcodec.h"
 #include "internal.h"
+#include "libvpx.h"
 
 typedef struct VP8DecoderContext {
     struct vpx_codec_ctx decoder;
@@ -90,9 +91,9 @@ static int vp8_decode(AVCodecContext *avctx,
         if ((int) img->d_w != avctx->width || (int) img->d_h != avctx->height) {
             av_log(avctx, AV_LOG_INFO, "dimension change! %dx%d -> %dx%d\n",
                    avctx->width, avctx->height, img->d_w, img->d_h);
-            if (av_image_check_size(img->d_w, img->d_h, 0, avctx))
-                return AVERROR_INVALIDDATA;
-            avcodec_set_dimensions(avctx, img->d_w, img->d_h);
+            ret = ff_set_dimensions(avctx, img->d_w, img->d_h);
+            if (ret < 0)
+                return ret;
         }
         if ((ret = ff_get_buffer(avctx, picture, 0)) < 0)
             return ret;
@@ -144,6 +145,7 @@ AVCodec ff_libvpx_vp9_decoder = {
     .init           = vp9_init,
     .close          = vp8_free,
     .decode         = vp8_decode,
-    .capabilities   = CODEC_CAP_AUTO_THREADS | CODEC_CAP_EXPERIMENTAL,
+    .capabilities   = CODEC_CAP_AUTO_THREADS | CODEC_CAP_DR1,
+    .init_static_data = ff_vp9_init_static,
 };
 #endif /* CONFIG_LIBVPX_VP9_DECODER */

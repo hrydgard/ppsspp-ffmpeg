@@ -594,9 +594,74 @@ ffplay "rtmp://myserver/live/mystream live=1"
 
 @section rtp
 
-Real-Time Protocol.
+Real-time Transport Protocol.
+
+The required syntax for an RTP URL is:
+rtp://@var{hostname}[:@var{port}][?@var{option}=@var{val}...]
+
+@var{port} specifies the RTP port to use.
+
+The following URL options are supported:
+
+@table @option
+
+@item ttl=@var{n}
+Set the TTL (Time-To-Live) value (for multicast only).
+
+@item rtcpport=@var{n}
+Set the remote RTCP port to @var{n}.
+
+@item localrtpport=@var{n}
+Set the local RTP port to @var{n}.
+
+@item localrtcpport=@var{n}'
+Set the local RTCP port to @var{n}.
+
+@item pkt_size=@var{n}
+Set max packet size (in bytes) to @var{n}.
+
+@item connect=0|1
+Do a @code{connect()} on the UDP socket (if set to 1) or not (if set
+to 0).
+
+@item sources=@var{ip}[,@var{ip}]
+List allowed source IP addresses.
+
+@item block=@var{ip}[,@var{ip}]
+List disallowed (blocked) source IP addresses.
+
+@item write_to_source=0|1
+Send packets to the source address of the latest received packet (if
+set to 1) or to a default remote address (if set to 0).
+
+@item localport=@var{n}
+Set the local RTP port to @var{n}.
+
+This is a deprecated option. Instead, @option{localrtpport} should be
+used.
+
+@end table
+
+Important notes:
+
+@enumerate
+
+@item
+If @option{rtcpport} is not set the RTCP port will be set to the RTP
+port value plus 1.
+
+@item
+If @option{localrtpport} (the local RTP port) is not set any available
+port will be used for the local RTP and RTCP ports.
+
+@item
+If @option{localrtcpport} (the local RTCP port) is not set it will be
+set to the the local RTP port value plus 1.
+@end enumerate
 
 @section rtsp
+
+Real-Time Streaming Protocol.
 
 RTSP is not technically a protocol handler in libavformat, it is a demuxer
 and muxer. The demuxer supports both normal RTSP (with data transferred
@@ -612,14 +677,22 @@ The required syntax for a RTSP url is:
 rtsp://@var{hostname}[:@var{port}]/@var{path}
 @end example
 
-The following options (set on the @command{ffmpeg}/@command{ffplay} command
-line, or set in code via @code{AVOption}s or in @code{avformat_open_input}),
-are supported:
+Options can be set on the @command{ffmpeg}/@command{ffplay} command
+line, or set in code via @code{AVOption}s or in
+@code{avformat_open_input}.
 
-Flags for @code{rtsp_transport}:
+The following options are supported.
 
 @table @option
+@item initial_pause
+Do not start playing the stream immediately if set to 1. Default value
+is 0.
 
+@item rtsp_transport
+Set RTSP trasport protocols.
+
+It accepts the following values:
+@table @samp
 @item udp
 Use UDP as lower transport protocol.
 
@@ -637,15 +710,54 @@ passing proxies.
 
 Multiple lower transport protocols may be specified, in that case they are
 tried one at a time (if the setup of one fails, the next one is tried).
-For the muxer, only the @code{tcp} and @code{udp} options are supported.
+For the muxer, only the @samp{tcp} and @samp{udp} options are supported.
 
-Flags for @code{rtsp_flags}:
+@item rtsp_flags
+Set RTSP flags.
 
-@table @option
+The following values are accepted:
+@table @samp
 @item filter_src
 Accept packets only from negotiated peer address and port.
 @item listen
 Act as a server, listening for an incoming connection.
+@end table
+
+Default value is @samp{none}.
+
+@item allowed_media_types
+Set media types to accept from the server.
+
+The following flags are accepted:
+@table @samp
+@item video
+@item audio
+@item data
+@end table
+
+By default it accepts all media types.
+
+@item min_port
+Set minimum local UDP port. Default value is 5000.
+
+@item max_port
+Set maximum local UDP port. Default value is 65000.
+
+@item timeout
+Set maximum timeout (in seconds) to wait for incoming connections.
+
+A value of -1 mean infinite (default). This option implies the
+@option{rtsp_flags} set to @samp{listen}.
+
+@item reorder_queue_size
+Set number of packets to buffer for handling of reordered packets.
+
+@item stimeout
+Set socket TCP I/O timeout in micro seconds.
+
+@item user-agent
+Override User-Agent header. If not specified, it default to the
+libavformat identifier string.
 @end table
 
 When receiving data over UDP, the demuxer tries to reorder received packets
@@ -658,36 +770,36 @@ streams to display can be chosen with @code{-vst} @var{n} and
 @code{-ast} @var{n} for video and audio respectively, and can be switched
 on the fly by pressing @code{v} and @code{a}.
 
-Example command lines:
+@subsection Examples
 
-To watch a stream over UDP, with a max reordering delay of 0.5 seconds:
+The following examples all make use of the @command{ffplay} and
+@command{ffmpeg} tools.
 
+@itemize
+@item
+Watch a stream over UDP, with a max reordering delay of 0.5 seconds:
 @example
 ffplay -max_delay 500000 -rtsp_transport udp rtsp://server/video.mp4
 @end example
 
-To watch a stream tunneled over HTTP:
-
+@item
+Watch a stream tunneled over HTTP:
 @example
 ffplay -rtsp_transport http rtsp://server/video.mp4
 @end example
 
-To send a stream in realtime to a RTSP server, for others to watch:
-
+@item
+Send a stream in realtime to a RTSP server, for others to watch:
 @example
 ffmpeg -re -i @var{input} -f rtsp -muxdelay 0.1 rtsp://server/live.sdp
 @end example
 
-To receive a stream in realtime:
-
+@item
+Receive a stream in realtime:
 @example
 ffmpeg -rtsp_flags listen -i rtsp://ownaddress/live.sdp @var{output}
 @end example
-
-@table @option
-@item stimeout
-Socket IO timeout in micro seconds.
-@end table
+@end itemize
 
 @section sap
 
@@ -834,22 +946,31 @@ The required syntax for a TCP url is:
 tcp://@var{hostname}:@var{port}[?@var{options}]
 @end example
 
-@table @option
+@var{options} contains a list of &-separated options of the form
+@var{key}=@var{val}.
 
-@item listen
-Listen for an incoming connection
+The list of supported options follows.
+
+@table @option
+@item listen=@var{1|0}
+Listen for an incoming connection. Default value is 0.
 
 @item timeout=@var{microseconds}
-In read mode: if no data arrived in more than this time interval, raise error.
-In write mode: if socket cannot be written in more than this time interval, raise error.
-This also sets timeout on TCP connection establishing.
+Set raise error timeout, expressed in microseconds.
 
+This option is only relevant in read mode: if no data arrived in more
+than this time interval, raise error.
+
+@item listen_timeout=@var{microseconds}
+Set listen timeout, expressed in microseconds.
+@end table
+
+The following example shows how to setup a listening TCP connection
+with @command{ffmpeg}, which is then accessed with @command{ffplay}:
 @example
 ffmpeg -i @var{input} -f @var{format} tcp://@var{hostname}:@var{port}?listen
 ffplay tcp://@var{hostname}:@var{port}
 @end example
-
-@end table
 
 @section tls
 
@@ -916,7 +1037,7 @@ ffplay tls://@var{hostname}:@var{port}
 
 User Datagram Protocol.
 
-The required syntax for a UDP url is:
+The required syntax for an UDP URL is:
 @example
 udp://@var{hostname}:@var{port}[?@var{options}]
 @end example
@@ -931,7 +1052,6 @@ UDP socket buffer overruns. The @var{fifo_size} and
 The list of supported options follows.
 
 @table @option
-
 @item buffer_size=@var{size}
 Set the UDP socket buffer size in bytes. This is used both for the
 receiving and the sending buffer size.
@@ -981,25 +1101,34 @@ Survive in case of UDP receiving circular buffer overrun. Default
 value is 0.
 
 @item timeout=@var{microseconds}
-In read mode: if no data arrived in more than this time interval, raise error.
+Set raise error timeout, expressed in microseconds.
+
+This option is only relevant in read mode: if no data arrived in more
+than this time interval, raise error.
 @end table
 
-Some usage examples of the UDP protocol with @command{ffmpeg} follow.
+@subsection Examples
 
-To stream over UDP to a remote endpoint:
+@itemize
+@item
+Use @command{ffmpeg} to stream over UDP to a remote endpoint:
 @example
 ffmpeg -i @var{input} -f @var{format} udp://@var{hostname}:@var{port}
 @end example
 
-To stream in mpegts format over UDP using 188 sized UDP packets, using a large input buffer:
+@item
+Use @command{ffmpeg} to stream in mpegts format over UDP using 188
+sized UDP packets, using a large input buffer:
 @example
 ffmpeg -i @var{input} -f mpegts udp://@var{hostname}:@var{port}?pkt_size=188&buffer_size=65535
 @end example
 
-To receive over UDP from a remote endpoint:
+@item
+Use @command{ffmpeg} to receive over UDP from a remote endpoint:
 @example
-ffmpeg -i udp://[@var{multicast-address}]:@var{port}
+ffmpeg -i udp://[@var{multicast-address}]:@var{port} ...
 @end example
+@end itemize
 
 @section unix
 

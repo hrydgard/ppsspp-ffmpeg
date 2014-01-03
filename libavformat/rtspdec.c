@@ -769,7 +769,7 @@ static int resetup_tcp(AVFormatContext *s)
 
     av_url_split(NULL, 0, NULL, 0, host, sizeof(host), &port, NULL, 0,
                  s->filename);
-    ff_rtsp_undo_setup(s);
+    ff_rtsp_undo_setup(s, 0);
     return ff_rtsp_make_setup_request(s, host, port, RTSP_LOWER_TRANSPORT_TCP,
                                       rt->real_challenge);
 }
@@ -877,7 +877,7 @@ retry:
                  rt->get_parameter_supported)) {
                 ff_rtsp_send_cmd_async(s, "GET_PARAMETER", rt->control_uri, NULL);
             } else {
-                ff_rtsp_send_cmd_async(s, "OPTIONS", "*", NULL);
+                ff_rtsp_send_cmd_async(s, "OPTIONS", rt->control_uri, NULL);
             }
             /* The stale flag should be reset when creating the auth response in
              * ff_rtsp_send_cmd_async, but reset it here just in case we never

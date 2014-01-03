@@ -369,6 +369,10 @@ static int lag_decode_zero_run_line(LagarithContext *l, uint8_t *dst,
     uint8_t mask2 = -(esc_count < 3);
     uint8_t *end = dst + (width - 2);
 
+    avpriv_request_sample(l->avctx, "zero_run_line");
+
+    memset(dst, 0, width);
+
 output_zeros:
     if (l->zeros_rem) {
         count = FFMIN(l->zeros_rem, width - i);
@@ -423,6 +427,7 @@ static int lag_decode_arith_plane(LagarithContext *l, uint8_t *dst,
     GetBitContext gb;
     lag_rac rac;
     const uint8_t *src_end = src + src_size;
+    int ret;
 
     rac.avctx = l->avctx;
     l->zeros = 0;
@@ -440,7 +445,8 @@ static int lag_decode_arith_plane(LagarithContext *l, uint8_t *dst,
             offset += 4;
         }
 
-        init_get_bits(&gb, src + offset, src_size * 8);
+        if ((ret = init_get_bits8(&gb, src + offset, src_size - offset)) < 0)
+            return ret;
 
         if (lag_read_prob_header(&rac, &gb) < 0)
             return -1;
@@ -457,6 +463,8 @@ static int lag_decode_arith_plane(LagarithContext *l, uint8_t *dst,
                    length);
     } else if (esc_count < 8) {
         esc_count -= 4;
+        src ++;
+        src_size --;
         if (esc_count > 0) {
             /* Zero run coding only, no range coding. */
             for (i = 0; i < height; i++) {

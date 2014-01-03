@@ -32,7 +32,47 @@
 #include "sinewin.h"
 #include "fft.h"
 #include "atrac3plus.h"
-#include "atrac3plus_data.h"
+
+/**
+ *  Map quant unit number to its position in the spectrum.
+ *  To get the number of spectral lines in each quant unit do the following:
+ *  num_specs = qu_to_spec_pos[i+1] - qu_to_spec_pos[i]
+ */
+const uint16_t ff_atrac3p_qu_to_spec_pos[33] = {
+      0,    16,   32,   48,   64,   80,   96,  112,
+    128,   160,  192,  224,  256,  288,  320,  352,
+    384,   448,  512,  576,  640,  704,  768,  896,
+    1024, 1152, 1280, 1408, 1536, 1664, 1792, 1920,
+    2048
+};
+
+/* Scalefactors table. */
+/* Approx. Equ: pow(2.0, (i - 16.0 + 0.501783948) / 3.0) */
+const float ff_atrac3p_sf_tab[64] = {
+    0.027852058,  0.0350914, 0.044212341, 0.055704117,  0.0701828,
+    0.088424683, 0.11140823,   0.1403656,  0.17684937, 0.22281647, 0.2807312, 0.35369873,
+    0.44563293,   0.5614624,  0.70739746,  0.89126587,  1.1229248, 1.4147949,  1.7825317,
+    2.2458496,    2.8295898,   3.5650635,   4.4916992,  5.6591797,  7.130127,  8.9833984,
+    11.318359,    14.260254,   17.966797,   22.636719,  28.520508, 35.933594,  45.273438,
+    57.041016,    71.867188,   90.546875,   114.08203,  143.73438, 181.09375,  228.16406,
+    287.46875,     362.1875,   456.32812,    574.9375,    724.375, 912.65625,   1149.875,
+    1448.75,      1825.3125,     2299.75,      2897.5,   3650.625,    4599.5,     5795.0,
+    7301.25,         9199.0,     11590.0,     14602.5,    18398.0,   23180.0,    29205.0,
+    36796.0,        46360.0,     58410.0
+};
+
+/* Mantissa table. */
+/* pow(10, x * log10(2) + 0.05) / 2 / ([1,2,3,5,7,15,31] + 0.5) */
+const float ff_atrac3p_mant_tab[8] = {
+    0.0,
+    0.74801636,
+    0.44882202,
+    0.32058716,
+    0.20400238,
+    0.1496048,
+    0.07239151,
+    0.035619736
+};
 
 #define ATRAC3P_MDCT_SIZE (ATRAC3P_SUBBAND_SAMPLES * 2)
 
@@ -70,6 +110,15 @@ av_cold void ff_atrac3p_init_wave_synth(void)
         amp_sf_tab[i] = pow(2.0f, ((double)i - 3) / 4.0f);
 }
 
+/**
+ *  Synthesize sine waves according to given parameters.
+ *
+ *  @param[in]    synth_param   ptr to common synthesis parameters
+ *  @param[in]    waves_info    parameters for each sine wave
+ *  @param[in]    envelope      envelope data for all waves in a group
+ *  @param[in]    reg_offset    region offset for trimming envelope data
+ *  @param[out]   out           receives sythesized data
+ */
 static void waves_synth(Atrac3pWaveSynthParams *synth_param,
                         Atrac3pWavesData *waves_info,
                         Atrac3pWaveEnvelope *envelope,
@@ -87,20 +136,13 @@ static void waves_synth(Atrac3pWaveSynthParams *synth_param,
                : 1.0f);
 
         inc = wave_param->freq_index;
-        pos = DEQUANT_PHASE(wave_param->phase_index) - (reg_offset ^ 128) * inc & 0x7FF;
+        pos = DEQUANT_PHASE(wave_param->phase_index) - (reg_offset ^ 128) * inc & 2047;
 
         /* waveform generation */
         for (i = 0; i < 128; i++) {
             out[i] += sine_table[pos] * amp;
-            pos     = (pos + inc) & 0x7FF;
+            pos     = (pos + inc) & 2047;
         }
-    }
-
-    /* 180° phase shift if requested */
-    if (phase_shift) {
-        pos = envelope->has_stop_point ? (envelope->stop_pos + 1 << 2) - reg_offset : 128;
-        for (i = envelope->has_start_point ? (envelope->start_pos << 2) - reg_offset : 0; i < pos; i++)
-            out[i] *= -1.0f;
     }
 
     /* fade in with steep Hann window if requested */
@@ -365,15 +407,6 @@ static const int subband_to_qu[17] = {
     0, 8, 12, 16, 18, 20, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32
 };
 
-/**
- *  Perform power compensation aka noise dithering.
- *
- *  @param[in]     ctx       ptr to the channel context
- *  @param[in]     ch_index  which channel to process
- *  @param[in,out] sp        ptr to channel spectrum to process
- *  @param[in]     rng_index indicates which RNG table to use
- *  @param[in]     sb_num    which subband to process
- */
 void ff_atrac3p_power_compensation(Atrac3pChanUnitCtx *ctx, int ch_index,
                                    float *sp, int rng_index, int sb)
 {
@@ -420,16 +453,6 @@ void ff_atrac3p_power_compensation(Atrac3pChanUnitCtx *ctx, int ch_index,
     }
 }
 
-/**
- *  Regular IMDCT + windowing without overlapping,
- *  with spectrum reversal in the odd subbands.
- *
- *  @param[in]  mdct_ctx  pointer to MDCT transform context
- *  @param[in]  pInput    float input
- *  @param[out] pOutput   float output
- *  @param[in]  wind_id   which MDCT window to apply
- *  @param[in]  sb        subband number
- */
 void ff_atrac3p_imdct(AVFloatDSPContext *fdsp, FFTContext *mdct_ctx, float *pIn,
                       float *pOut, int wind_id, int sb)
 {
@@ -571,15 +594,6 @@ static const float ipqf_coeffs2[ATRAC3P_PQF_FIR_LEN][16] = {
       -4.4400572e-8,    -4.2005411e-7,    -8.0604229e-7,    -5.8336207e-7 }
 };
 
-/**
- *  Subband synthesis filter based on the polyphase quadrature (pseudo-QMF)
- *  filter bank.
- *
- *  @param[in]     dct_ctx  ptr to the pre-initialized IDCT context
- *  @param[in,out] hist     ptr to the filter history
- *  @param[in]     in       input data to process
- *  @param[out]    out      receives processed data
- */
 void ff_atrac3p_ipqf(FFTContext *dct_ctx, Atrac3pIPQFChannelCtx *hist,
                      const float *in, float *out)
 {

@@ -153,19 +153,88 @@ typedef struct Atrac3pChanUnitCtx {
     DECLARE_ALIGNED(32, float, prev_buf)[2][ATRAC3P_FRAME_SAMPLES]; ///< overlapping buffer
 } Atrac3pChanUnitCtx;
 
+/**
+ * Initialize VLC tables for bitstream parsing.
+ */
 void ff_atrac3p_init_vlcs(void);
-int  ff_atrac3p_decode_channel_unit(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
-                                    int num_channels, AVCodecContext *avctx);
 
+/**
+ * Decode bitstream data of a channel unit.
+ *
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
+ * @param[in]     num_channels  number of channels to process
+ * @param[in]     avctx         ptr to the AVCodecContext
+ * @return result code: 0 = OK, otherwise - error code
+ */
+int ff_atrac3p_decode_channel_unit(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
+                                   int num_channels, AVCodecContext *avctx);
+
+/**
+ * Initialize IMDCT transform.
+ *
+ * @param[in]   avctx      ptr to the AVCodecContext
+ * @param[in]   mdct_ctx   pointer to MDCT transform context
+ */
 void ff_atrac3p_init_imdct(AVCodecContext *avctx, FFTContext *mdct_ctx);
+
+/**
+ * Initialize sine waves synthesizer.
+ */
 void ff_atrac3p_init_wave_synth(void);
+
+/**
+ * Synthesize sine waves for a particular subband.
+ *
+ * @param[in]   ch_unit   pointer to the channel unit context
+ * @param[in]   fdsp      pointer to float DSP context
+ * @param[in]   ch_num    which channel to process
+ * @param[in]   sb        which subband to process
+ * @param[out]  out       receives processed data
+ */
 void ff_atrac3p_generate_tones(Atrac3pChanUnitCtx *ch_unit, AVFloatDSPContext *fdsp,
                                int ch_num, int sb, float *out);
+
+/**
+ * Perform power compensation aka noise dithering.
+ *
+ * @param[in]      ctx         ptr to the channel context
+ * @param[in]      ch_index    which channel to process
+ * @param[in,out]  sp          ptr to channel spectrum to process
+ * @param[in]      rng_index   indicates which RNG table to use
+ * @param[in]      sb          which subband to process
+ */
 void ff_atrac3p_power_compensation(Atrac3pChanUnitCtx *ctx, int ch_index,
                                    float *sp, int rng_index, int sb_num);
+
+/**
+ * Regular IMDCT and windowing without overlapping,
+ * with spectrum reversal in the odd subbands.
+ *
+ * @param[in]   fdsp       pointer to float DSP context
+ * @param[in]   mdct_ctx   pointer to MDCT transform context
+ * @param[in]   pIn        float input
+ * @param[out]  pOut       float output
+ * @param[in]   wind_id    which MDCT window to apply
+ * @param[in]   sb         subband number
+ */
 void ff_atrac3p_imdct(AVFloatDSPContext *fdsp, FFTContext *mdct_ctx, float *pIn,
                       float *pOut, int wind_id, int sb);
+
+/**
+ * Subband synthesis filter based on the polyphase quadrature (pseudo-QMF)
+ * filter bank.
+ *
+ * @param[in]      dct_ctx   ptr to the pre-initialized IDCT context
+ * @param[in,out]  hist      ptr to the filter history
+ * @param[in]      in        input data to process
+ * @param[out]     out       receives processed data
+ */
 void ff_atrac3p_ipqf(FFTContext *dct_ctx, Atrac3pIPQFChannelCtx *hist,
                      const float *in, float *out);
+
+extern const uint16_t ff_atrac3p_qu_to_spec_pos[33];
+extern const float ff_atrac3p_sf_tab[64];
+extern const float ff_atrac3p_mant_tab[8];
 
 #endif /* AVCODEC_ATRAC3PLUS_H */

@@ -47,7 +47,7 @@ static VLC tone_vlc_tabs[7];
  *
  * @param[in]     cb          ptr to codebook descriptor
  * @param[in]     xlat        ptr to translation table or NULL
- * @param[in,out] tab_offset  ptr to the table offset
+ * @param[in,out] tab_offset  starting offset to the generated vlc table
  * @param[out]    out_vlc     ptr to vlc table to be generated
  */
 static av_cold void build_canonical_huff(const uint8_t *cb, const uint8_t *xlat,
@@ -87,74 +87,74 @@ av_cold void ff_atrac3p_init_vlcs(void)
     static int wl_nb_bits[4]  = { 2, 3, 5, 5 };
     static int wl_nb_codes[4] = { 3, 5, 8, 8 };
     static const uint8_t *wl_bits[4] = {
-        ff_atrac3p_wl_huff_bits1, ff_atrac3p_wl_huff_bits2,
-        ff_atrac3p_wl_huff_bits3, ff_atrac3p_wl_huff_bits4
+        atrac3p_wl_huff_bits1, atrac3p_wl_huff_bits2,
+        atrac3p_wl_huff_bits3, atrac3p_wl_huff_bits4
     };
     static const uint8_t *wl_codes[4] = {
-        ff_atrac3p_wl_huff_code1, ff_atrac3p_wl_huff_code2,
-        ff_atrac3p_wl_huff_code3, ff_atrac3p_wl_huff_code4
+        atrac3p_wl_huff_code1, atrac3p_wl_huff_code2,
+        atrac3p_wl_huff_code3, atrac3p_wl_huff_code4
     };
     static const uint8_t *wl_xlats[4] = {
-        ff_atrac3p_wl_huff_xlat1, ff_atrac3p_wl_huff_xlat2, NULL, NULL
+        atrac3p_wl_huff_xlat1, atrac3p_wl_huff_xlat2, NULL, NULL
     };
 
     static int ct_nb_bits[4]  = { 3, 4, 4, 4 };
     static int ct_nb_codes[4] = { 4, 8, 8, 8 };
     static const uint8_t *ct_bits[4]  = {
-        ff_atrac3p_ct_huff_bits1, ff_atrac3p_ct_huff_bits2,
-        ff_atrac3p_ct_huff_bits2, ff_atrac3p_ct_huff_bits3
+        atrac3p_ct_huff_bits1, atrac3p_ct_huff_bits2,
+        atrac3p_ct_huff_bits2, atrac3p_ct_huff_bits3
     };
     static const uint8_t *ct_codes[4] = {
-        ff_atrac3p_ct_huff_code1, ff_atrac3p_ct_huff_code2,
-        ff_atrac3p_ct_huff_code2, ff_atrac3p_ct_huff_code3
+        atrac3p_ct_huff_code1, atrac3p_ct_huff_code2,
+        atrac3p_ct_huff_code2, atrac3p_ct_huff_code3
     };
     static const uint8_t *ct_xlats[4] = {
-        NULL, NULL, ff_atrac3p_ct_huff_xlat1, NULL
+        NULL, NULL, atrac3p_ct_huff_xlat1, NULL
     };
 
     static int sf_nb_bits[8]  = {  9,  9,  9,  9,  6,  6,  7,  7 };
     static int sf_nb_codes[8] = { 64, 64, 64, 64, 16, 16, 16, 16 };
     static const uint8_t  *sf_bits[8]  = {
-        ff_atrac3p_sf_huff_bits1, ff_atrac3p_sf_huff_bits1, ff_atrac3p_sf_huff_bits2,
-        ff_atrac3p_sf_huff_bits3, ff_atrac3p_sf_huff_bits4, ff_atrac3p_sf_huff_bits4,
-        ff_atrac3p_sf_huff_bits5, ff_atrac3p_sf_huff_bits6
+        atrac3p_sf_huff_bits1, atrac3p_sf_huff_bits1, atrac3p_sf_huff_bits2,
+        atrac3p_sf_huff_bits3, atrac3p_sf_huff_bits4, atrac3p_sf_huff_bits4,
+        atrac3p_sf_huff_bits5, atrac3p_sf_huff_bits6
     };
     static const uint16_t *sf_codes[8] = {
-        ff_atrac3p_sf_huff_code1, ff_atrac3p_sf_huff_code1, ff_atrac3p_sf_huff_code2,
-        ff_atrac3p_sf_huff_code3, ff_atrac3p_sf_huff_code4, ff_atrac3p_sf_huff_code4,
-        ff_atrac3p_sf_huff_code5, ff_atrac3p_sf_huff_code6
+        atrac3p_sf_huff_code1, atrac3p_sf_huff_code1, atrac3p_sf_huff_code2,
+        atrac3p_sf_huff_code3, atrac3p_sf_huff_code4, atrac3p_sf_huff_code4,
+        atrac3p_sf_huff_code5, atrac3p_sf_huff_code6
     };
     static const uint8_t  *sf_xlats[8] = {
-        ff_atrac3p_sf_huff_xlat1, ff_atrac3p_sf_huff_xlat2, NULL, NULL,
-        ff_atrac3p_sf_huff_xlat4, ff_atrac3p_sf_huff_xlat5, NULL, NULL
+        atrac3p_sf_huff_xlat1, atrac3p_sf_huff_xlat2, NULL, NULL,
+        atrac3p_sf_huff_xlat4, atrac3p_sf_huff_xlat5, NULL, NULL
     };
 
     static const uint8_t *gain_cbs[11] = {
-        ff_atrac3p_huff_gain_npoints1_cb, ff_atrac3p_huff_gain_npoints1_cb,
-        ff_atrac3p_huff_gain_lev1_cb, ff_atrac3p_huff_gain_lev2_cb,
-        ff_atrac3p_huff_gain_lev3_cb, ff_atrac3p_huff_gain_lev4_cb,
-        ff_atrac3p_huff_gain_loc3_cb, ff_atrac3p_huff_gain_loc1_cb,
-        ff_atrac3p_huff_gain_loc4_cb, ff_atrac3p_huff_gain_loc2_cb,
-        ff_atrac3p_huff_gain_loc5_cb
+        atrac3p_huff_gain_npoints1_cb, atrac3p_huff_gain_npoints1_cb,
+        atrac3p_huff_gain_lev1_cb, atrac3p_huff_gain_lev2_cb,
+        atrac3p_huff_gain_lev3_cb, atrac3p_huff_gain_lev4_cb,
+        atrac3p_huff_gain_loc3_cb, atrac3p_huff_gain_loc1_cb,
+        atrac3p_huff_gain_loc4_cb, atrac3p_huff_gain_loc2_cb,
+        atrac3p_huff_gain_loc5_cb
     };
     static const uint8_t *gain_xlats[11] = {
-        NULL, ff_atrac3p_huff_gain_npoints2_xlat, ff_atrac3p_huff_gain_lev1_xlat,
-        ff_atrac3p_huff_gain_lev2_xlat, ff_atrac3p_huff_gain_lev3_xlat,
-        ff_atrac3p_huff_gain_lev4_xlat, ff_atrac3p_huff_gain_loc3_xlat,
-        ff_atrac3p_huff_gain_loc1_xlat, ff_atrac3p_huff_gain_loc4_xlat,
-        ff_atrac3p_huff_gain_loc2_xlat, ff_atrac3p_huff_gain_loc5_xlat
+        NULL, atrac3p_huff_gain_npoints2_xlat, atrac3p_huff_gain_lev1_xlat,
+        atrac3p_huff_gain_lev2_xlat, atrac3p_huff_gain_lev3_xlat,
+        atrac3p_huff_gain_lev4_xlat, atrac3p_huff_gain_loc3_xlat,
+        atrac3p_huff_gain_loc1_xlat, atrac3p_huff_gain_loc4_xlat,
+        atrac3p_huff_gain_loc2_xlat, atrac3p_huff_gain_loc5_xlat
     };
 
     static const uint8_t *tone_cbs[7] = {
-        ff_atrac3p_huff_tonebands_cb,  ff_atrac3p_huff_numwavs1_cb,
-        ff_atrac3p_huff_numwavs2_cb,   ff_atrac3p_huff_wav_ampsf1_cb,
-        ff_atrac3p_huff_wav_ampsf2_cb, ff_atrac3p_huff_wav_ampsf3_cb,
-        ff_atrac3p_huff_freq_cb
+        atrac3p_huff_tonebands_cb,  atrac3p_huff_numwavs1_cb,
+        atrac3p_huff_numwavs2_cb,   atrac3p_huff_wav_ampsf1_cb,
+        atrac3p_huff_wav_ampsf2_cb, atrac3p_huff_wav_ampsf3_cb,
+        atrac3p_huff_freq_cb
     };
     static const uint8_t *tone_xlats[7] = {
-        NULL, NULL, ff_atrac3p_huff_numwavs2_xlat, ff_atrac3p_huff_wav_ampsf1_xlat,
-        ff_atrac3p_huff_wav_ampsf2_xlat, ff_atrac3p_huff_wav_ampsf3_xlat,
-        ff_atrac3p_huff_freq_xlat
+        NULL, NULL, atrac3p_huff_numwavs2_xlat, atrac3p_huff_wav_ampsf1_xlat,
+        atrac3p_huff_wav_ampsf2_xlat, atrac3p_huff_wav_ampsf3_xlat,
+        atrac3p_huff_freq_xlat
     };
 
     for (i = 0, wl_vlc_offs = 0, ct_vlc_offs = 2508; i < 4; i++) {
@@ -195,9 +195,9 @@ av_cold void ff_atrac3p_init_vlcs(void)
 
     /* build huffman tables for spectrum decoding */
     for (i = 0; i < 112; i++) {
-        if (ff_atrac3p_spectra_tabs[i].cb)
-            build_canonical_huff(ff_atrac3p_spectra_tabs[i].cb,
-                                 ff_atrac3p_spectra_tabs[i].xlat,
+        if (atrac3p_spectra_tabs[i].cb)
+            build_canonical_huff(atrac3p_spectra_tabs[i].cb,
+                                 atrac3p_spectra_tabs[i].xlat,
                                  &tab_offset, &spec_vlc_tabs[i]);
         else
             spec_vlc_tabs[i].table = 0;
@@ -212,6 +212,15 @@ av_cold void ff_atrac3p_init_vlcs(void)
         build_canonical_huff(tone_cbs[i], tone_xlats[i], &tab_offset, &tone_vlc_tabs[i]);
 }
 
+/**
+ * Decode number of coded quantization units.
+ *
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] chan          ptr to the channel parameters
+ * @param[in,out] ctx           ptr to the channel unit context
+ * @param[in]     avctx         ptr to the AVCodecContext
+ * @return result code: 0 = OK, otherwise - error code
+ */
 static int num_coded_units(GetBitContext *gb, Atrac3pChanParams *chan,
                            Atrac3pChanUnitCtx *ctx, AVCodecContext *avctx)
 {
@@ -233,85 +242,103 @@ static int num_coded_units(GetBitContext *gb, Atrac3pChanParams *chan,
     return 0;
 }
 
-static void add_wordlen_weights(Atrac3pChanUnitCtx *ctx,
-                                Atrac3pChanParams *chan, int wtab_idx)
+/**
+ * Add weighting coefficients to the decoded word-length information.
+ *
+ * @param[in,out] ctx           ptr to the channel unit context
+ * @param[in,out] chan          ptr to the channel parameters
+ * @param[in]     avctx         ptr to the AVCodecContext
+ * @return result code: 0 = OK, otherwise - error code
+ */
+static int add_wordlen_weights(Atrac3pChanUnitCtx *ctx,
+                               Atrac3pChanParams *chan, int wtab_idx,
+                               AVCodecContext *avctx)
 {
     int i;
     const int8_t *weights_tab =
-        &ff_atrac3p_wl_weights[chan->ch_num * 3 + wtab_idx - 1][0];
+        &atrac3p_wl_weights[chan->ch_num * 3 + wtab_idx - 1][0];
 
-    for (i = 0; i < ctx->num_quant_units; i++)
+    for (i = 0; i < ctx->num_quant_units; i++) {
         chan->qu_wordlen[i] += weights_tab[i];
+        if (chan->qu_wordlen[i] < 0 || chan->qu_wordlen[i] > 7) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "WL index out of range: pos=%d, val=%d!\n",
+                   i, chan->qu_wordlen[i]);
+            return AVERROR_INVALIDDATA;
+        }
+    }
+
+    return 0;
 }
 
-static void subtract_sf_weights(Atrac3pChanUnitCtx *ctx,
-                                Atrac3pChanParams *chan, int wtab_idx)
+/**
+ * Subtract weighting coefficients from decoded scalefactors.
+ *
+ * @param[in,out] ctx           ptr to the channel unit context
+ * @param[in,out] chan          ptr to the channel parameters
+ * @param[in]     wtab_idx      index of table of weights
+ * @param[in]     avctx         ptr to the AVCodecContext
+ * @return result code: 0 = OK, otherwise - error code
+ */
+static int subtract_sf_weights(Atrac3pChanUnitCtx *ctx,
+                               Atrac3pChanParams *chan, int wtab_idx,
+                               AVCodecContext *avctx)
 {
     int i;
-    const int8_t *weights_tab;
+    const int8_t *weights_tab = &atrac3p_sf_weights[wtab_idx - 1][0];
 
-    weights_tab = &ff_atrac3p_sf_weights[wtab_idx - 1][0];
-
-    for (i = 0; i < ctx->used_quant_units; i++)
+    for (i = 0; i < ctx->used_quant_units; i++) {
         chan->qu_sf_idx[i] -= weights_tab[i];
+        if (chan->qu_sf_idx[i] < 0 || chan->qu_sf_idx[i] > 63) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "SF index out of range: pos=%d, val=%d!\n",
+                   i, chan->qu_sf_idx[i]);
+            return AVERROR_INVALIDDATA;
+        }
+    }
+
+    return 0;
 }
 
-static void unpack_wordlen_shape(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
-                                 Atrac3pChanParams *chan)
+/**
+ * Unpack vector quantization tables.
+ *
+ * @param[in]    start_val    start value for the unpacked table
+ * @param[in]    shape_vec    ptr to table to unpack
+ * @param[out]   dst          ptr to output array
+ * @param[in]    num_values   number of values to unpack
+ */
+static inline void unpack_vq_shape(int start_val, const int8_t *shape_vec,
+                                   int *dst, int num_values)
 {
     int i;
-    const int8_t *shape_vec;
-    int start_val = get_bits(gb, 3);
-    int shape_idx = get_bits(gb, 4);
 
-    if (chan->num_coded_vals) {
-        shape_vec = &ff_atrac3p_wl_shapes[start_val][shape_idx][0];
-
-        /* unpack shape vector values for each quant unit */
-        chan->qu_wordlen[0] = start_val;
-        chan->qu_wordlen[1] = start_val;
-        chan->qu_wordlen[2] = start_val;
-
-        for (i = 3; i < chan->num_coded_vals; i++)
-            chan->qu_wordlen[i] = start_val -
-                                  shape_vec[ff_atrac3p_qu_num_to_seg[i] - 1];
+    if (num_values) {
+        dst[0] = dst[1] = dst[2] = start_val;
+        for (i = 3; i < num_values; i++)
+            dst[i] = start_val - shape_vec[atrac3p_qu_num_to_seg[i] - 1];
     }
 }
 
-static void unpack_scalefactor_shape(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
-                                     Atrac3pChanParams *chan)
-{
-    int i;
-    const int8_t *shape_vec;
-    int start_val = get_bits(gb, 6);
-    int shape_idx = get_bits(gb, 6);
-
-    if (ctx->used_quant_units) {
-        shape_vec = &ff_atrac3p_sf_shapes[shape_idx][0];
-
-        /* unpack shape vector values for each quant unit */
-        chan->qu_sf_idx[0] = start_val;
-        chan->qu_sf_idx[1] = start_val;
-        chan->qu_sf_idx[2] = start_val;
-
-        for (i = 3; i < ctx->used_quant_units; i++)
-            chan->qu_sf_idx[i] = start_val -
-                                 shape_vec[ff_atrac3p_qu_num_to_seg[i] - 1];
-    }
-}
+#define UNPACK_SF_VQ_SHAPE(gb, dst, num_vals)                            \
+    start_val = get_bits((gb), 6);                                       \
+    unpack_vq_shape(start_val, &atrac3p_sf_shapes[get_bits((gb), 6)][0], \
+                    (dst), (num_vals))
 
 /**
  * Decode word length for each quantization unit of a channel.
  *
- * @param[in,out] ctx           ptr to the decoder context
- * @param[in]     num_channels  number of channels to process
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
+ * @param[in]     ch_num        channel to process
  * @param[in]     avctx         ptr to the AVCodecContext
- * @return result code: 0 = OK, -1 = error
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_channel_wordlen(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                   int ch_num, AVCodecContext *avctx)
 {
-    int i, weight_idx = 0, delta, diff, pos, delta_bits, min_val, flag, ret;
+    int i, weight_idx = 0, delta, diff, pos, delta_bits, min_val, flag,
+        ret, start_val;
     VLC *vlc_tab;
     Atrac3pChanParams *chan     = &ctx->channels[ch_num];
     Atrac3pChanParams *ref_chan = &ctx->channels[0];
@@ -356,7 +383,7 @@ static int decode_channel_wordlen(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                     chan->qu_wordlen[i] = get_bits(gb, 3);
 
                 for (i = pos; i < chan->num_coded_vals; i++)
-                    chan->qu_wordlen[i] = min_val + GET_DELTA(gb, delta_bits);
+                    chan->qu_wordlen[i] = (min_val + GET_DELTA(gb, delta_bits)) & 7;
             }
         }
         break;
@@ -378,7 +405,10 @@ static int decode_channel_wordlen(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
             flag    = get_bits(gb, 1);
             vlc_tab = &wl_vlc_tabs[get_bits(gb, 1)];
 
-            unpack_wordlen_shape(gb, ctx, chan);
+            start_val = get_bits(gb, 3);
+            unpack_vq_shape(start_val,
+                            &atrac3p_wl_shapes[start_val][get_bits(gb, 4)][0],
+                            chan->qu_wordlen, chan->num_coded_vals);
 
             if (!flag) {
                 for (i = 0; i < chan->num_coded_vals; i++) {
@@ -433,7 +463,7 @@ static int decode_channel_wordlen(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
     }
 
     if (weight_idx)
-        add_wordlen_weights(ctx, chan, weight_idx);
+        return add_wordlen_weights(ctx, chan, weight_idx, avctx);
 
     return 0;
 }
@@ -441,16 +471,17 @@ static int decode_channel_wordlen(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode scale factor indexes for each quant unit of a channel.
  *
- * @param[in,out] ctx           ptr to the decoder context
- * @param[in]     num_channels  number of channels to process
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
+ * @param[in]     ch_num        channel to process
  * @param[in]     avctx         ptr to the AVCodecContext
- * @return result code: 0 = OK, -1 = error
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_channel_sf_idx(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                  int ch_num, AVCodecContext *avctx)
 {
-    int i, weight_idx, delta, diff, num_long_vals,
-        delta_bits, min_val, vlc_sel;
+    int i, weight_idx = 0, delta, diff, num_long_vals,
+        delta_bits, min_val, vlc_sel, start_val;
     VLC *vlc_tab;
     Atrac3pChanParams *chan     = &ctx->channels[ch_num];
     Atrac3pChanParams *ref_chan = &ctx->channels[0];
@@ -471,7 +502,7 @@ static int decode_channel_sf_idx(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
         } else {
             weight_idx = get_bits(gb, 2);
             if (weight_idx == 3) {
-                unpack_scalefactor_shape(gb, ctx, chan);
+                UNPACK_SF_VQ_SHAPE(gb, chan->qu_sf_idx, ctx->used_quant_units);
 
                 num_long_vals = get_bits(gb, 5);
                 delta_bits    = get_bits(gb, 2);
@@ -501,10 +532,8 @@ static int decode_channel_sf_idx(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 
                 /* all others are: min_val + delta */
                 for (i = num_long_vals; i < ctx->used_quant_units; i++)
-                    chan->qu_sf_idx[i] = min_val + GET_DELTA(gb, delta_bits);
-
-                if (weight_idx)
-                    subtract_sf_weights(ctx, chan, weight_idx);
+                    chan->qu_sf_idx[i] = (min_val +
+                                          GET_DELTA(gb, delta_bits)) & 0x3F;
             }
         }
         break;
@@ -523,7 +552,7 @@ static int decode_channel_sf_idx(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
         } else {
             vlc_tab = &sf_vlc_tabs[get_bits(gb, 2) + 4];
 
-            unpack_scalefactor_shape(gb, ctx, chan);
+            UNPACK_SF_VQ_SHAPE(gb, chan->qu_sf_idx, ctx->used_quant_units);
 
             for (i = 0; i < ctx->used_quant_units; i++) {
                 delta = get_vlc2(gb, vlc_tab->table, vlc_tab->bits, 1);
@@ -545,7 +574,7 @@ static int decode_channel_sf_idx(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
             if (weight_idx == 3) {
                 vlc_tab = &sf_vlc_tabs[vlc_sel + 4];
 
-                unpack_scalefactor_shape(gb, ctx, chan);
+                UNPACK_SF_VQ_SHAPE(gb, chan->qu_sf_idx, ctx->used_quant_units);
 
                 diff               = (get_bits(gb, 4)    + 56)   & 0x3F;
                 chan->qu_sf_idx[0] = (chan->qu_sf_idx[0] + diff) & 0x3F;
@@ -563,13 +592,13 @@ static int decode_channel_sf_idx(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                     delta = get_vlc2(gb, vlc_tab->table, vlc_tab->bits, 1);
                     chan->qu_sf_idx[i] = (chan->qu_sf_idx[i - 1] + delta) & 0x3F;
                 }
-
-                if (weight_idx)
-                    subtract_sf_weights(ctx, chan, weight_idx);
             }
         }
         break;
     }
+
+    if (weight_idx && weight_idx < 3)
+        return subtract_sf_weights(ctx, chan, weight_idx, avctx);
 
     return 0;
 }
@@ -577,10 +606,11 @@ static int decode_channel_sf_idx(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode word length information for each channel.
  *
- * @param[in,out] ctx           ptr to the decoder context
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
  * @param[in]     num_channels  number of channels to process
  * @param[in]     avctx         ptr to the AVCodecContext
- * @return result code: 0 = OK, -1 = error
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_quant_wordlen(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                 int num_channels, AVCodecContext *avctx)
@@ -609,10 +639,11 @@ static int decode_quant_wordlen(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode scale factor indexes for each channel.
  *
- * @param[in,out] ctx           ptr to the decoder context
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
  * @param[in]     num_channels  number of channels to process
  * @param[in]     avctx         ptr to the AVCodecContext
- * @return result code: 0 = OK, -1 = error
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_scale_factors(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                 int num_channels, AVCodecContext *avctx)
@@ -633,6 +664,14 @@ static int decode_scale_factors(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
     return 0;
 }
 
+/**
+ * Decode number of code table values.
+ *
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
+ * @param[in]     avctx         ptr to the AVCodecContext
+ * @return result code: 0 = OK, otherwise - error code
+ */
 static int get_num_ct_values(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                              AVCodecContext *avctx)
 {
@@ -680,10 +719,11 @@ static int get_num_ct_values(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode code table indexes for each quant unit of a channel.
  *
- * @param[in,out] ctx           ptr to the decoder context
- * @param[in]     num_channels  number of channels to process
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
+ * @param[in]     ch_num        channel to process
  * @param[in]     avctx         ptr to the AVCodecContext
- * @return result code: 0 = OK, -1 = error
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_channel_code_tab(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                    int ch_num, AVCodecContext *avctx)
@@ -732,10 +772,11 @@ static int decode_channel_code_tab(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode code table indexes for each channel.
  *
- * @param[in,out] ctx           ptr to the decoder context
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
  * @param[in]     num_channels  number of channels to process
  * @param[in]     avctx         ptr to the AVCodecContext
- * @return result code: 0 = OK, -1 = error
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_code_table_indexes(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                      int num_channels, AVCodecContext *avctx)
@@ -766,7 +807,7 @@ static int decode_code_table_indexes(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
  *
  * @param[in]   gb          the GetBit context
  * @param[in]   tab         code table telling how to decode spectral lines
- * @param[in]   vlc         ptr to the huffman table associated with the code table
+ * @param[in]   vlc_tab     ptr to the huffman table associated with the code table
  * @param[out]  out         pointer to buffer where decoded data should be stored
  * @param[in]   num_specs   number of spectral lines to decode
  */
@@ -804,7 +845,8 @@ static void decode_qu_spectra(GetBitContext *gb, const Atrac3pSpecCodeTab *tab,
 /**
  * Decode huffman-coded IMDCT spectrum for all channels.
  *
- * @param[in,out] ctx           ptr to the decoder context
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
  * @param[in]     num_channels  number of channels to process
  * @param[in]     avctx         ptr to the AVCodecContext
  */
@@ -831,10 +873,10 @@ static void decode_spectrum(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
             codetab = chan->qu_tab_idx[qu];
             if (wordlen) {
                 if (!ctx->use_full_table)
-                    codetab = ff_atrac3p_ct_restricted_to_full[chan->table_type][wordlen - 1][codetab];
+                    codetab = atrac3p_ct_restricted_to_full[chan->table_type][wordlen - 1][codetab];
 
                 tab_index = (chan->table_type * 8 + codetab) * 7 + wordlen - 1;
-                tab       = &ff_atrac3p_spectra_tabs[tab_index];
+                tab       = &atrac3p_spectra_tabs[tab_index];
 
                 /* this allows reusing VLC tables */
                 if (tab->redirect >= 0)
@@ -858,7 +900,7 @@ static void decode_spectrum(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
          * correspond to the frequencies 0...351 Hz, whose shouldn't
          * be affected by the power compensation. */
         if (ctx->used_quant_units > 2) {
-            num_specs = ff_atrac3p_subband_to_num_powgrps[ctx->num_coded_subbands - 1];
+            num_specs = atrac3p_subband_to_num_powgrps[ctx->num_coded_subbands - 1];
             for (i = 0; i < num_specs; i++)
                 chan->power_levs[i] = get_bits(gb, 4);
         }
@@ -876,31 +918,35 @@ static void decode_spectrum(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
  * @param[in]   gb              ptr to the GetBitContext
  * @param[out]  out             where to place decoded flags
  * @param[in]   num_flags       number of flags to process
+ * @return: 0 = all flag bits are zero, 1 = there is at least one non-zero flag bit
  */
-static void get_subband_flags(GetBitContext *gb, uint8_t *out, int num_flags)
+static int get_subband_flags(GetBitContext *gb, uint8_t *out, int num_flags)
 {
-    int i;
+    int i, result;
 
     memset(out, 0, num_flags);
 
-    if (get_bits1(gb)) {
+    result = get_bits1(gb);
+    if (result) {
         if (get_bits1(gb))
             for (i = 0; i < num_flags; i++)
                 out[i] = get_bits1(gb);
         else
             memset(out, 1, num_flags);
     }
+
+    return result;
 }
 
 /**
  * Decode mdct window shape flags for all channels.
  *
- * @param[in,out] ctx           ptr to the decoder context
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
  * @param[in]     num_channels  number of channels to process
- * @param[in]     avctx         ptr to the AVCodecContext
  */
 static void decode_window_shape(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
-                                int num_channels, AVCodecContext *avctx)
+                                int num_channels)
 {
     int ch_num;
 
@@ -912,15 +958,14 @@ static void decode_window_shape(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode number of gain control points.
  *
- * @param[in,out] ctx               ptr to the decoder context
- * @param[in]     num_channels      number of channels to process
- * @param[in]     coded_subbands    number of subbands in the bitstream data
- * @param[in]     avctx             ptr to the AVCodecContext
- * @return result code: 0 = OK, otherwise - error
+ * @param[in]     gb              the GetBit context
+ * @param[in,out] ctx             ptr to the channel unit context
+ * @param[in]     ch_num          channel to process
+ * @param[in]     coded_subbands  number of subbands to process
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_gainc_npoints(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
-                                int ch_num, int coded_subbands,
-                                AVCodecContext *avctx)
+                                int ch_num, int coded_subbands)
 {
     int i, delta, delta_bits, min_val;
     Atrac3pChanParams *chan     = &ctx->channels[ch_num];
@@ -978,6 +1023,12 @@ static int decode_gainc_npoints(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
     return 0;
 }
 
+/**
+ * Implements coding mode 3 (slave) for gain compensation levels.
+ *
+ * @param[out]   dst   ptr to the output array
+ * @param[in]    ref   ptr to the reference channel
+ */
 static inline void gainc_level_mode3s(AtracGainInfo *dst, AtracGainInfo *ref)
 {
     int i;
@@ -986,6 +1037,13 @@ static inline void gainc_level_mode3s(AtracGainInfo *dst, AtracGainInfo *ref)
         dst->lev_code[i] = (i >= ref->num_points) ? 7 : ref->lev_code[i];
 }
 
+/**
+ * Implements coding mode 1 (master) for gain compensation levels.
+ *
+ * @param[in]     gb     the GetBit context
+ * @param[in]     ctx    ptr to the channel unit context
+ * @param[out]    dst    ptr to the output array
+ */
 static inline void gainc_level_mode1m(GetBitContext *gb,
                                       Atrac3pChanUnitCtx *ctx,
                                       AtracGainInfo *dst)
@@ -1006,15 +1064,14 @@ static inline void gainc_level_mode1m(GetBitContext *gb,
 /**
  * Decode level code for each gain control point.
  *
- * @param[in,out] ctx               ptr to the decoder context
- * @param[in]     num_channels      number of channels to process
- * @param[in]     coded_subbands    number of subbands in the bitstream data
- * @param[in]     avctx             ptr to the AVCodecContext
- * @return result code: 0 = OK, otherwise - error
+ * @param[in]     gb              the GetBit context
+ * @param[in,out] ctx             ptr to the channel unit context
+ * @param[in]     ch_num          channel to process
+ * @param[in]     coded_subbands  number of subbands to process
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_gainc_levels(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
-                               int ch_num, int coded_subbands,
-                               AVCodecContext *avctx)
+                               int ch_num, int coded_subbands)
 {
     int sb, i, delta, delta_bits, min_val, pred;
     Atrac3pChanParams *chan     = &ctx->channels[ch_num];
@@ -1087,6 +1144,14 @@ static int decode_gainc_levels(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
     return 0;
 }
 
+/**
+ * Implements coding mode 0 for gain compensation locations.
+ *
+ * @param[in]     gb     the GetBit context
+ * @param[in]     ctx    ptr to the channel unit context
+ * @param[out]    dst    ptr to the output array
+ * @param[in]     pos    position of the value to be processed
+ */
 static inline void gainc_loc_mode0(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                    AtracGainInfo *dst, int pos)
 {
@@ -1094,7 +1159,7 @@ static inline void gainc_loc_mode0(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 
     if (!pos || dst->loc_code[pos - 1] < 15)
         dst->loc_code[pos] = get_bits(gb, 5);
-    else if (dst->loc_code[pos - 1] == 30)
+    else if (dst->loc_code[pos - 1] >= 30)
         dst->loc_code[pos] = 31;
     else {
         delta_bits         = av_log2(30 - dst->loc_code[pos - 1]) + 1;
@@ -1103,6 +1168,13 @@ static inline void gainc_loc_mode0(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
     }
 }
 
+/**
+ * Implements coding mode 1 for gain compensation locations.
+ *
+ * @param[in]     gb     the GetBit context
+ * @param[in]     ctx    ptr to the channel unit context
+ * @param[out]    dst    ptr to the output array
+ */
 static inline void gainc_loc_mode1(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                    AtracGainInfo *dst)
 {
@@ -1128,11 +1200,12 @@ static inline void gainc_loc_mode1(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode location code for each gain control point.
  *
- * @param[in,out] ctx               ptr to the decoder context
- * @param[in]     num_channels      number of channels to process
- * @param[in]     coded_subbands    number of subbands in the bitstream data
- * @param[in]     avctx             ptr to the AVCodecContext
- * @return result code: 0 = OK, otherwise - error
+ * @param[in]     gb              the GetBit context
+ * @param[in,out] ctx             ptr to the channel unit context
+ * @param[in]     ch_num          channel to process
+ * @param[in]     coded_subbands  number of subbands to process
+ * @param[in]     avctx           ptr to the AVCodecContext
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_gainc_loc_codes(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                   int ch_num, int coded_subbands,
@@ -1255,14 +1328,25 @@ static int decode_gainc_loc_codes(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
             min_val    = get_bits(gb, 5);
 
             for (sb = 0; sb < coded_subbands; sb++)
-                for (i = 0; i < chan->gain_data[sb].num_points; i++) {
+                for (i = 0; i < chan->gain_data[sb].num_points; i++)
                     chan->gain_data[sb].loc_code[i] = min_val + i +
                                                       get_bits(gb, delta_bits);
-                    if (chan->gain_data[sb].loc_code[i] > 31)
-                        return AVERROR_INVALIDDATA;
-                }
         }
         break;
+    }
+
+    /* Validate decoded information */
+    for (sb = 0; sb < coded_subbands; sb++) {
+        dst = &chan->gain_data[sb];
+        for (i = 0; i < chan->gain_data[sb].num_points; i++) {
+            if (dst->loc_code[i] < 0 || dst->loc_code[i] > 31 ||
+                (i && dst->loc_code[i] <= dst->loc_code[i - 1])) {
+                av_log(avctx, AV_LOG_ERROR,
+                       "Invalid gain location: ch=%d, sb=%d, pos=%d, val=%d\n",
+                       ch_num, sb, i, dst->loc_code[i]);
+                return AVERROR_INVALIDDATA;
+            }
+        }
     }
 
     return 0;
@@ -1271,9 +1355,11 @@ static int decode_gainc_loc_codes(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode gain control data for all channels.
  *
- * @param[in,out] ctx           ptr to the decoder context
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
  * @param[in]     num_channels  number of channels to process
  * @param[in]     avctx         ptr to the AVCodecContext
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_gainc_data(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                              int num_channels, AVCodecContext *avctx)
@@ -1291,9 +1377,9 @@ static int decode_gainc_data(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
             else
                 ctx->channels[ch_num].num_gain_subbands = coded_subbands;
 
-            if ((ret = decode_gainc_npoints(gb, ctx, ch_num, coded_subbands, avctx)   < 0) ||
-                (ret = decode_gainc_levels(gb, ctx, ch_num, coded_subbands, avctx)    < 0) ||
-                (ret = decode_gainc_loc_codes(gb, ctx, ch_num, coded_subbands, avctx) < 0))
+            if ((ret = decode_gainc_npoints(gb, ctx, ch_num, coded_subbands)) < 0 ||
+                (ret = decode_gainc_levels(gb, ctx, ch_num, coded_subbands))  < 0 ||
+                (ret = decode_gainc_loc_codes(gb, ctx, ch_num, coded_subbands, avctx)) < 0)
                 return ret;
 
             if (coded_subbands > 0) { /* propagate gain data if requested */
@@ -1312,8 +1398,9 @@ static int decode_gainc_data(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode envelope for all tones of a channel.
  *
- * @param[in,out] ctx               ptr to the decoder context
- * @param[in]     ch_num            channel number of the channel being processed
+ * @param[in]     gb                the GetBit context
+ * @param[in,out] ctx               ptr to the channel unit context
+ * @param[in]     ch_num            channel to process
  * @param[in]     band_has_tones    ptr to an array of per-band-flags:
  *                                  1 - tone data present
  */
@@ -1350,11 +1437,13 @@ static void decode_tones_envelope(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode number of tones for each subband of a channel.
  *
- * @param[in,out] ctx               ptr to the decoder context
- * @param[in]     ch_num            channel number of the channel being processed
+ * @param[in]     gb                the GetBit context
+ * @param[in,out] ctx               ptr to the channel unit context
+ * @param[in]     ch_num            channel to process
  * @param[in]     band_has_tones    ptr to an array of per-band-flags:
  *                                  1 - tone data present
  * @param[in]     avctx             ptr to the AVCodecContext
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_band_numwavs(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                int ch_num, int band_has_tones[],
@@ -1411,6 +1500,15 @@ static int decode_band_numwavs(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
     return 0;
 }
 
+/**
+ * Decode frequency information for each subband of a channel.
+ *
+ * @param[in]     gb                the GetBit context
+ * @param[in,out] ctx               ptr to the channel unit context
+ * @param[in]     ch_num            channel to process
+ * @param[in]     band_has_tones    ptr to an array of per-band-flags:
+ *                                  1 - tone data present
+ */
 static void decode_tones_frequency(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                    int ch_num, int band_has_tones[])
 {
@@ -1462,9 +1560,17 @@ static void decode_tones_frequency(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
     }
 }
 
+/**
+ * Decode amplitude information for each subband of a channel.
+ *
+ * @param[in]     gb                the GetBit context
+ * @param[in,out] ctx               ptr to the channel unit context
+ * @param[in]     ch_num            channel to process
+ * @param[in]     band_has_tones    ptr to an array of per-band-flags:
+ *                                  1 - tone data present
+ */
 static void decode_tones_amplitude(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
-                                   int ch_num, int band_has_tones[],
-                                   AVCodecContext *avctx)
+                                   int ch_num, int band_has_tones[])
 {
     int mode, sb, j, i, diff, maxdiff, fi, delta, pred;
     Atrac3pWaveParam *wsrc, *wref;
@@ -1554,6 +1660,15 @@ static void decode_tones_amplitude(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
     }
 }
 
+/**
+ * Decode phase information for each subband of a channel.
+ *
+ * @param[in]     gb                the GetBit context
+ * @param[in,out] ctx               ptr to the channel unit context
+ * @param[in]     ch_num            channel to process
+ * @param[in]     band_has_tones    ptr to an array of per-band-flags:
+ *                                  1 - tone data present
+ */
 static void decode_tones_phase(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                                int ch_num, int band_has_tones[])
 {
@@ -1573,15 +1688,21 @@ static void decode_tones_phase(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 /**
  * Decode tones info for all channels.
  *
- * @param[in,out] ctx           ptr to the decoder context
+ * @param[in]     gb            the GetBit context
+ * @param[in,out] ctx           ptr to the channel unit context
  * @param[in]     num_channels  number of channels to process
  * @param[in]     avctx         ptr to the AVCodecContext
+ * @return result code: 0 = OK, otherwise - error code
  */
 static int decode_tones_info(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                              int num_channels, AVCodecContext *avctx)
 {
     int ch_num, i, ret;
     int band_has_tones[16];
+
+    for (ch_num = 0; ch_num < num_channels; ch_num++)
+        memset(ctx->channels[ch_num].tones_info, 0,
+               sizeof(*ctx->channels[ch_num].tones_info) * ATRAC3P_SUBBANDS);
 
     ctx->waves_info->tones_present = get_bits1(gb);
     if (!ctx->waves_info->tones_present)
@@ -1602,7 +1723,11 @@ static int decode_tones_info(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
     if (num_channels == 2) {
         get_subband_flags(gb, ctx->waves_info->tone_sharing, ctx->waves_info->num_tone_bands);
         get_subband_flags(gb, ctx->waves_info->tone_master,  ctx->waves_info->num_tone_bands);
-        get_subband_flags(gb, ctx->waves_info->phase_shift,  ctx->waves_info->num_tone_bands);
+        if (get_subband_flags(gb, ctx->waves_info->phase_shift,
+                              ctx->waves_info->num_tone_bands)) {
+            avpriv_report_missing_feature(avctx, "GHA Phase shifting");
+            return AVERROR_PATCHWELCOME;
+        }
     }
 
     ctx->waves_info->tones_index = 0;
@@ -1617,7 +1742,7 @@ static int decode_tones_info(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
             return ret;
 
         decode_tones_frequency(gb, ctx, ch_num, band_has_tones);
-        decode_tones_amplitude(gb, ctx, ch_num, band_has_tones, avctx);
+        decode_tones_amplitude(gb, ctx, ch_num, band_has_tones);
         decode_tones_phase(gb, ctx, ch_num, band_has_tones);
     }
 
@@ -1651,13 +1776,13 @@ int ff_atrac3p_decode_channel_unit(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 
     ctx->mute_flag = get_bits1(gb);
 
-    /* decode sound parameters */
+    /* decode various sound parameters */
     if ((ret = decode_quant_wordlen(gb, ctx, num_channels, avctx)) < 0)
         return ret;
 
-    ctx->num_subbands       = ff_atrac3p_qu_to_subband[ctx->num_quant_units - 1] + 1;
+    ctx->num_subbands       = atrac3p_qu_to_subband[ctx->num_quant_units - 1] + 1;
     ctx->num_coded_subbands = ctx->used_quant_units
-                              ? ff_atrac3p_qu_to_subband[ctx->used_quant_units - 1] + 1
+                              ? atrac3p_qu_to_subband[ctx->used_quant_units - 1] + 1
                               : 0;
 
     if ((ret = decode_scale_factors(gb, ctx, num_channels, avctx)) < 0)
@@ -1673,7 +1798,7 @@ int ff_atrac3p_decode_channel_unit(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
         get_subband_flags(gb, ctx->negate_coeffs, ctx->num_coded_subbands);
     }
 
-    decode_window_shape(gb, ctx, num_channels, avctx);
+    decode_window_shape(gb, ctx, num_channels);
 
     if ((ret = decode_gainc_data(gb, ctx, num_channels, avctx)) < 0)
         return ret;

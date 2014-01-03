@@ -189,7 +189,7 @@ static int validate_codec_tag(AVFormatContext *s, AVStream *st)
     const AVCodecTag *avctag;
     int n;
     enum AVCodecID id = AV_CODEC_ID_NONE;
-    unsigned int tag  = 0;
+    int64_t tag  = -1;
 
     /**
      * Check that tag + id is in the table
@@ -212,7 +212,7 @@ static int validate_codec_tag(AVFormatContext *s, AVStream *st)
     }
     if (id != AV_CODEC_ID_NONE)
         return 0;
-    if (tag && (st->codec->strict_std_compliance >= FF_COMPLIANCE_NORMAL))
+    if (tag >= 0 && (st->codec->strict_std_compliance >= FF_COMPLIANCE_NORMAL))
         return 0;
     return 1;
 }
@@ -237,7 +237,7 @@ static int init_muxer(AVFormatContext *s, AVDictionary **options)
 
     // some sanity checks
     if (s->nb_streams == 0 && !(of->flags & AVFMT_NOSTREAMS)) {
-        av_log(s, AV_LOG_ERROR, "no streams\n");
+        av_log(s, AV_LOG_ERROR, "No streams to mux were specified\n");
         ret = AVERROR(EINVAL);
         goto fail;
     }
@@ -339,6 +339,8 @@ static int init_muxer(AVFormatContext *s, AVDictionary **options)
     /* set muxer identification string */
     if (s->nb_streams && !(s->streams[0]->codec->flags & CODEC_FLAG_BITEXACT)) {
         av_dict_set(&s->metadata, "encoder", LIBAVFORMAT_IDENT, 0);
+    } else {
+        av_dict_set(&s->metadata, "encoder", NULL, 0);
     }
 
     if (options) {

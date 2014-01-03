@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Wei Gao <weigao@multicorewareinc.com>
+ * Copyright (C) 2013 Lenny Wang
  *
  * This file is part of FFmpeg.
  *
@@ -55,11 +56,10 @@ typedef struct {
 #if CONFIG_OPENCL
 
 typedef struct {
-    size_t matrix_size;
-    float matrix_y[9];
-    float matrix_uv[9];
-    cl_mem cl_matrix_y;
-    cl_mem cl_matrix_uv;
+    cl_command_queue command_queue;
+    cl_program program;
+    cl_kernel kernel_luma;
+    cl_kernel kernel_chroma;
     int in_plane_size[8];
     int out_plane_size[8];
     int plane_num;
@@ -67,7 +67,6 @@ typedef struct {
     size_t cl_inbuf_size;
     cl_mem cl_outbuf;
     size_t cl_outbuf_size;
-    AVOpenCLKernelEnv kernel_env;
 } DeshakeOpenclContext;
 
 #endif

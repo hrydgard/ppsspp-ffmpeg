@@ -48,6 +48,7 @@ static const struct ogg_codec * const ogg_codecs[] = {
     &ff_flac_codec,
     &ff_celt_codec,
     &ff_opus_codec,
+    &ff_vp8_codec,
     &ff_old_dirac_codec,
     &ff_old_flac_codec,
     &ff_ogm_video_codec,
@@ -99,7 +100,7 @@ static int ogg_restore(AVFormatContext *s, int discard)
     if (!discard) {
 
         for (i = 0; i < ogg->nstreams; i++)
-            av_free(ogg->streams[i].buf);
+            av_freep(&ogg->streams[i].buf);
 
         avio_seek(bc, ost->pos, SEEK_SET);
         ogg->page_pos = -1;
@@ -142,6 +143,7 @@ static int ogg_reset(AVFormatContext *s)
         if (start_pos <= s->data_offset) {
             os->lastpts = 0;
         }
+        os->end_trimming = 0;
     }
 
     ogg->page_pos = -1;
@@ -633,14 +635,14 @@ static int ogg_read_close(AVFormatContext *s)
     int i;
 
     for (i = 0; i < ogg->nstreams; i++) {
-        av_free(ogg->streams[i].buf);
+        av_freep(&ogg->streams[i].buf);
         if (ogg->streams[i].codec &&
             ogg->streams[i].codec->cleanup) {
             ogg->streams[i].codec->cleanup(s, i);
         }
-        av_free(ogg->streams[i].private);
+        av_freep(&ogg->streams[i].private);
     }
-    av_free(ogg->streams);
+    av_freep(&ogg->streams);
     return 0;
 }
 
@@ -784,6 +786,7 @@ retry:
             return AVERROR(ENOMEM);
         }
         AV_WL32(side_data + 4, os->end_trimming);
+        os->end_trimming = 0;
     }
 
     return psize;
