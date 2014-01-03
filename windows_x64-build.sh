@@ -65,23 +65,13 @@ VIDEO_DECODERS="
     --enable-decoder=mjpegb
 "
 
-#unused
 AUDIO_ENCODERS="
-    --enable-encoder=aac
     --enable-encoder=pcm_s16le
-    --enable-encoder=pcm_s8
 "
 
 #unused
 VIDEO_ENCODERS="
-#    --enable-encoder=libx264
-#    --enable-encoder=libx264rgb
-    --enable-encoder=mpeg4
-#    --enable-encoder=msmpeg4v2
-#    --enable-encoder=msmpeg4v3
-#    --enable-encoder=libxvid
-    --enable-encoder=mpeg2video
-#    --enable-encoder=mjpeg
+    --enable-encoder=mjpeg
 "
 
 HARDWARE_ACCELS="
@@ -95,17 +85,7 @@ HARDWARE_ACCELS="
 
 #unused
 MUXERS="
-    --enable-muxer=h264
-    --enable-muxer=mp4
-    --enable-muxer=m4v
     --enable-muxer=avi
-    --enable-muxer=mp3
-    --enable-muxer=psp
-    --enable-muxer=oma
-    --enable-muxer=wav
-    --enable-muxer=pcm_s16le
-    --enable-muxer=pcm_s8
-
 "
 
 DEMUXERS="
@@ -224,8 +204,11 @@ PARAMS="$(genelateparams GENERAL)\
 $(genelatelibparams)\
 $(echo -e "$(genelateparams AUDIO_DECODERS)")\
 $(echo -e "$(genelateparams VIDEO_DECODERS)")\
+$(echo -e "$(genelateparams AUDIO_ENCODERS)")\
+$(echo -e "$(genelateparams VIDEO_ENCODERS)")\
 $(echo -e "$(genelateparams BSFS)")\
 $(echo -e "$(genelateparams PARSERS)")\
+$(echo -e "$(genelateparams MUXERS)")\
 $(echo -e "$(genelateparams DEMUXERS)")\
 $(echo -e "$(genelateparams HARDWARE_ACCELS)")\
 $(echo -e "$(genelateparams INPUT_DEVICES)")\

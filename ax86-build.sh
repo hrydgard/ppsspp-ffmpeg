@@ -53,6 +53,15 @@ DEMUXERS="\
     --enable-demuxer=pcm_s8 \
     --enable-demuxer=wav"
 
+VIDEO_ENCODERS="\
+	  --enable-encoder=mjpeg"
+
+AUDIO_ENCODERS="\
+	  --enable-encoder=pcm_s16le"
+
+MUXERS="\
+  	--enable-muxer=avi"
+
 PARSERS="\
     --enable-parser=h264 \
     --enable-parser=mpeg4video \
@@ -60,55 +69,6 @@ PARSERS="\
     --enable-parser=mpegvideo \
     --enable-parser=aac \
     --enable-parser=aac_latm"
-
-
-function build_ARMv6
-{
-./configure --target-os=linux \
-    --prefix=./android/armv6 \
-    --arch=arm \
-    ${GENERAL} \
-    --sysroot=$PLATFORM \
-    --extra-cflags=" -O3 -fpic -DANDROID -DHAVE_SYS_UIO_H=1 -Dipv6mr_interface=ipv6mr_ifindex -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -DCMP_HAVE_VFP -mfloat-abi=softfp -mfpu=vfp -marm -march=armv6" \
-    --disable-shared \
-    --enable-static \
-    --extra-ldflags="-Wl,-rpath-link=$PLATFORM/usr/lib -L$PLATFORM/usr/lib -nostdlib -lc -lm -ldl -llog" \
-    --enable-zlib \
-    --disable-everything \
-    ${MODULES} \
-    ${VIDEO_DECODERS} \
-    ${AUDIO_DECODERS} \
-    ${DEMUXERS} \
-    ${PARSERS} \
-    --disable-neon
-
-make clean
-make install
-}
-
-function build_ARMv7
-{
-./configure --target-os=linux \
-    --prefix=./android/armv7 \
-    --arch=arm \
-    ${GENERAL} \
-    --sysroot=$PLATFORM \
-    --extra-cflags=" -O3 -fpic -DANDROID -DHAVE_SYS_UIO_H=1 -Dipv6mr_interface=ipv6mr_ifindex -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfloat-abi=softfp -mfpu=vfp -marm -march=armv7-a" \
-    --disable-shared \
-    --enable-static \
-    --extra-ldflags="-Wl,-rpath-link=$PLATFORM/usr/lib -L$PLATFORM/usr/lib -nostdlib -lc -lm -ldl -llog" \
-    --enable-zlib \
-    --disable-everything \
-    ${MODULES} \
-    ${VIDEO_DECODERS} \
-    ${AUDIO_DECODERS} \
-    ${DEMUXERS} \
-    ${PARSERS} \
-    --disable-neon \
-
-make clean
-make install
-}
 
 function build_x86
 {
@@ -126,13 +86,14 @@ function build_x86
     ${MODULES} \
     ${VIDEO_DECODERS} \
     ${AUDIO_DECODERS} \
+    ${VIDEO_ENCODERS} \
+    ${AUDIO_ENCODERS} \
     ${DEMUXERS} \
+		${MUXERS} \
     ${PARSERS}
 
 make clean
 make install
 }
 
-#build_ARMv6
-#build_ARMv7
 build_x86

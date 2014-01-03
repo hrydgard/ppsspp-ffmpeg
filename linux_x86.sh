@@ -47,6 +47,15 @@ DEMUXERS="\
     --enable-demuxer=pcm_s8 \
     --enable-demuxer=wav"
 
+VIDEO_ENCODERS="\
+	  --enable-encoder=mjpeg"
+
+AUDIO_ENCODERS="\
+	  --enable-encoder=pcm_s16le"
+
+MUXERS="\
+  	--enable-muxer=avi"
+
 PARSERS="\
     --enable-parser=h264 \
     --enable-parser=mpeg4video \
@@ -65,7 +74,10 @@ PARSERS="\
     ${MODULES} \
     ${VIDEO_DECODERS} \
     ${AUDIO_DECODERS} \
+    ${VIDEO_ENCODERS} \
+    ${AUDIO_ENCODERS} \
     ${DEMUXERS} \
+    ${MUXERS} \
     ${PARSERS} \
 		--arch=${ARCH} \
 

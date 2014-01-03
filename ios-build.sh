@@ -56,6 +56,16 @@ PARSERS="\
     --enable-parser=aac \
     --enable-parser=aac_latm"
 
+VIDEO_ENCODERS="\
+	  --enable-encoder=mjpeg"
+
+AUDIO_ENCODERS="\
+	  --enable-encoder=pcm_s16le"
+
+MUXERS="\
+  	--enable-muxer=avi"
+
+
 ./configure \
     --prefix=ios/armv7 \
     $GENERAL \
@@ -69,7 +79,10 @@ PARSERS="\
     ${MODULES} \
     ${VIDEO_DECODERS} \
     ${AUDIO_DECODERS} \
+    ${VIDEO_ENCODERS} \
+    ${AUDIO_ENCODERS} \
     ${DEMUXERS} \
+		${MUXERS} \
     ${PARSERS} \
     --target-os=darwin \
     --enable-vfp \
@@ -97,7 +110,10 @@ fi
     ${MODULES} \
     ${VIDEO_DECODERS} \
     ${AUDIO_DECODERS} \
+    ${VIDEO_ENCODERS} \
+    ${AUDIO_ENCODERS} \
     ${DEMUXERS} \
+    ${MUXERS} \
     ${PARSERS} \
     --target-os=darwin \
     --enable-vfp \
