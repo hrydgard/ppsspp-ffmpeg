@@ -70,6 +70,8 @@ AUDIO_ENCODERS="
 "
 
 VIDEO_ENCODERS="
+    --enable-encoder=huffyuv
+    --enable-encoder=ffv1
     --enable-encoder=mjpeg
 "
 

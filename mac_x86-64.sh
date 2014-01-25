@@ -49,6 +49,8 @@ DEMUXERS="\
     --enable-demuxer=wav"
 
 VIDEO_ENCODERS="\
+	  --enable-encoder=huffyuv
+	  --enable-encoder=ffv1
 	  --enable-encoder=mjpeg"
 
 AUDIO_ENCODERS="\
