@@ -1,12 +1,16 @@
 #!/bin/bash
-#ffmpeg for windows x86
-#windows_x86-build.sh requements.
+#ffmpeg for windows x64
+#windows_x64-build.sh requirements.
 # MinGW
+#
+# WARNING: If cc_check fails, rename MingW/msys/1.0/bin/link.exe as it clashes with
+# the MSVC one.
+#
 # MSYS
-# 1. open command-prompt of Visual Studio
+# 1. open command-prompt of Visual Studio (IMPORTANT: Correct bit-ness! There are both)
 # 2. run msys.bat on the command-line.
 # 3. $ cd /PathTo/ppsspp/ffmpeg
-# 4. $ windows_x86-build.sh
+# 4. $ windows_x64-build.sh
 #build requements.
 # use toolchain=msvc
 # http://ffmpeg.org/platform.html#Windows
