@@ -756,6 +756,7 @@ typedef struct AVStream {
         int64_t last_dts;
         int64_t duration_gcd;
         int duration_count;
+        int64_t rfps_duration_sum;
         double (*duration_error)[2][MAX_STD_TIMEBASES];
         int64_t codec_info_duration;
         int64_t codec_info_duration_fields;
@@ -775,6 +776,11 @@ typedef struct AVStream {
 
     int pts_wrap_bits; /**< number of bits in pts (used for wrapping control) */
 
+#if FF_API_REFERENCE_DTS
+    /* a hack to keep ABI compatibility for ffmpeg and other applications, which accesses parser even
+     * though it should not */
+    int64_t do_not_use;
+#endif
     // Timestamp generation support:
     /**
      * Timestamp corresponding to the last dts sync point.
@@ -783,7 +789,6 @@ typedef struct AVStream {
      * a DTS is received from the underlying container. Otherwise set to
      * AV_NOPTS_VALUE by default.
      */
-    int64_t reference_dts;
     int64_t first_dts;
     int64_t cur_dts;
     int64_t last_IP_pts;
@@ -888,6 +893,10 @@ typedef struct AVStream {
      */
     int pts_wrap_behavior;
 
+    /**
+     * Internal data to prevent doing update_initial_durations() twice
+     */
+    int update_initial_durations_done;
 } AVStream;
 
 AVRational av_stream_get_r_frame_rate(const AVStream *s);
