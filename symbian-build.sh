@@ -1,7 +1,7 @@
 #!/bin/bash
 #Download Symbian Linux SDK: https://projects.developer.nokia.com/symbian_linux_qtsdk/files/testinstaller_scp1.2_v201109271138_238.x32.run.7z
 if [ -z "$EPOCROOT" ]; then
-    echo "Could not find your Symbian NDK. Please run ~/QtSDK/Symbian/SDKs/Symbian3Qt474/setenv.sh"
+    echo "Could not find your Symbian NDK. Please run ~/QtSDK/Symbian/SDKs/SymbianSR1Qt474/setenv.sh"
     exit 1
 fi
 echo "Building for Symbian^3"
