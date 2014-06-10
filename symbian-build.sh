@@ -5,16 +5,15 @@ if [ -z "$EPOCROOT" ]; then
     exit 1
 fi
 echo "Building for Symbian^3"
-#Download CodeSourcery Symbian GCCE 4.6.3 for Linux
+#Download xsacha's Symbian GCC 4.8.3 for Linux
 #Change COMPILERROOT to your compiler dir
-COMPILERROOT=~/Downloads/arm-2012.03
+COMPILERROOT=~/Downloads/tools/gcc4.8.3_x86-64
 
 EPOCLIB=$EPOCROOT/epoc32/release/armv5
 EPOCINC=$EPOCROOT/epoc32/include
 
 GENERAL="\
    --enable-cross-compile \
-   --extra-libs="-lgcc_eh" \
    --arch=armv6zk \
    --cpu=arm1176jzf-s \
    --sysinclude=$EPOCINC \
