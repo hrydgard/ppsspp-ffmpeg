@@ -76,7 +76,7 @@ function build_ARMv6
 ./configure --target-os=linux \
     --prefix=./linux/armv6 \
     ${GENERAL} \
-    --extra-cflags=" -O3 -fpic -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -DCMP_HAVE_VFP -mfloat-abi=softfp -mfpu=vfp -marm -march=armv6" \
+    --extra-cflags=" -O3 -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfloat-abi=softfp -mfpu=vfp -marm -march=armv6" \
     --disable-shared \
     --enable-static \
     --enable-zlib \
@@ -100,7 +100,7 @@ function build_ARMv7
 ./configure --target-os=linux \
     --prefix=./linux/armv7 \
     ${GENERAL} \
-    --extra-cflags=" -O3 -fpic -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfloat-abi=softfp -mfpu=vfp -marm -march=armv7-a" \
+    --extra-cflags=" -O3 -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfloat-abi=softfp -mfpu=neon -marm -march=armv7-a" \
     --disable-shared \
     --enable-static \
     --enable-zlib \
@@ -112,9 +112,7 @@ function build_ARMv7
     ${AUDIO_ENCODERS} \
     ${DEMUXERS} \
     ${MUXERS} \
-    ${PARSERS} \
-    --disable-neon \
-
+    ${PARSERS}
 make clean
 make install
 }

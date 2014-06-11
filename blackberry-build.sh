@@ -79,7 +79,7 @@ PARSERS="\
     --prefix=./blackberry/armv7 \
     ${GENERAL} \
     --sysroot=$QNX_TARGET \
-    --extra-cflags="-O3 -fpic -DBLACKBERRY -DQNX -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -DCMP_HAVE_VFP -mfloat-abi=softfp -mfpu=neon -march=armv7 -mtune=cortex-a9" \
+    --extra-cflags="-O3 -fPIC -DBLACKBERRY -DQNX -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfloat-abi=softfp -mfpu=neon -march=armv7-a -mtune=cortex-a9 -mcpu=cortex-a9" \
     --disable-shared \
     --enable-static \
     --extra-ldflags="-Wl,-rpath-link=$QNX_TARGET/armle-v7/usr/lib -L$QNX_TARGET/armle-v7/usr/lib" \

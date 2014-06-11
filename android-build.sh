@@ -2,7 +2,7 @@
 #Change NDK to your Android NDK location
 NDK=/c/AndroidNDK
 PLATFORM=$NDK/platforms/android-8/arch-arm/
-PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.6/prebuilt/windows-x86_64
+PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.8/prebuilt/windows-x86_64
 
 GENERAL="\
    --enable-cross-compile \
@@ -55,15 +55,15 @@ DEMUXERS="\
     --enable-demuxer=wav"
 
 VIDEO_ENCODERS="\
-	  --enable-encoder=huffyuv \
-	  --enable-encoder=ffv1 \
-	  --enable-encoder=mjpeg"
+    --enable-encoder=huffyuv \
+    --enable-encoder=ffv1 \
+    --enable-encoder=mjpeg"
 
 AUDIO_ENCODERS="\
-	  --enable-encoder=pcm_s16le"
+    --enable-encoder=pcm_s16le"
 
 MUXERS="\
-  	--enable-muxer=avi"
+    --enable-muxer=avi"
 
 
 PARSERS="\
@@ -81,7 +81,7 @@ function build_ARMv6
     --prefix=./android/armv6 \
     ${GENERAL} \
     --sysroot=$PLATFORM \
-    --extra-cflags=" -O3 -fpic -DANDROID -DHAVE_SYS_UIO_H=1 -Dipv6mr_interface=ipv6mr_ifindex -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -DCMP_HAVE_VFP -mfloat-abi=softfp -mfpu=vfp -marm -march=armv6" \
+    --extra-cflags=" -O3 -fpic -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfloat-abi=softfp -mfpu=vfp -marm -march=armv6" \
     --disable-shared \
     --enable-static \
     --extra-ldflags="-Wl,-rpath-link=$PLATFORM/usr/lib -L$PLATFORM/usr/lib -nostdlib -lc -lm -ldl -llog" \
@@ -93,7 +93,7 @@ function build_ARMv6
     ${VIDEO_ENCODERS} \
     ${AUDIO_ENCODERS} \
     ${DEMUXERS} \
-		${MUXERS} \
+    ${MUXERS} \
     ${PARSERS} \
     --disable-neon
 
@@ -107,7 +107,7 @@ function build_ARMv7
     --prefix=./android/armv7 \
     ${GENERAL} \
     --sysroot=$PLATFORM \
-    --extra-cflags=" -O3 -fpic -DANDROID -DHAVE_SYS_UIO_H=1 -Dipv6mr_interface=ipv6mr_ifindex -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfloat-abi=softfp -mfpu=vfp -marm -march=armv7-a" \
+    --extra-cflags=" -O3 -fpic -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfloat-abi=softfp -mfpu=vfp -marm -march=armv7-a" \
     --disable-shared \
     --enable-static \
     --extra-ldflags="-Wl,-rpath-link=$PLATFORM/usr/lib -L$PLATFORM/usr/lib -nostdlib -lc -lm -ldl -llog" \
@@ -119,7 +119,7 @@ function build_ARMv7
     ${VIDEO_ENCODERS} \
     ${AUDIO_ENCODERS} \
     ${DEMUXERS} \
-		${MUXERS} \
+    ${MUXERS} \
     ${PARSERS} \
     --disable-neon \
 
