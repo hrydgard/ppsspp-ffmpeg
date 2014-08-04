@@ -1,6 +1,6 @@
 #!/bin/sh
 
-rm config.h
+rm -f config.h
 echo "Building for Linux"
 
 ARCH="x86_64"
