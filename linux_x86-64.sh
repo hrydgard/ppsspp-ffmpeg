@@ -73,6 +73,7 @@ PARSERS="\
     ${GENERAL} \
     --extra-cflags="-D__STDC_CONSTANT_MACROS -O3" \
     --enable-zlib \
+    --enable-pic \
 	--disable-yasm \
     --disable-everything \
     ${MODULES} \
