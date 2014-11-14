@@ -5,9 +5,16 @@ echo "Building for Linux"
 
 ARCH="mips32"
 
+#   --enable-cross-compile \
+#   --cc=mipsel-linux-gcc \
+#   --cxx=mipsel-linux-g++ \
+
 GENERAL="
-   --disable-shared \
-	 --enable-static"
+	--target-os=linux \
+	--disable-mipsdspr1 \
+	--disable-mipsdspr2 \
+	--disable-shared \
+	--enable-static"
 
 MODULES="\
    --disable-avdevice \
@@ -84,7 +91,7 @@ PARSERS="\
     ${DEMUXERS} \
     ${MUXERS} \
     ${PARSERS} \
-		--arch=${ARCH} \
+		--arch="mips" \
 
 make clean
 make install
