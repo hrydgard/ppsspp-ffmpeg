@@ -1,35 +1,40 @@
-ppsspp-ffmpeg
+FFmpeg README
 =============
 
-A private copy of FFMPEG used in PPSSPP.
+FFmpeg is a collection of libraries and tools to process multimedia content
+such as audio, video, subtitles and related metadata.
 
-Building
-========
+## Libraries
 
-If on Mac, iOS, Blackberry, Symbian or Linux, just run the corresponding build script
-If you are on an ARM Linux device, modify the ARCH used in the Linux script first.
+* `libavcodec` provides implementation of a wider range of codecs.
+* `libavformat` implements streaming protocols, container formats and basic I/O access.
+* `libavutil` includes hashers, decompressors and miscellaneous utility functions.
+* `libavfilter` provides a mean to alter decoded Audio and Video through chain of filters.
+* `libavdevice` provides an abstraction to access capture and playback devices.
+* `libswresample` implements audio mixing and resampling routines.
+* `libswscale` implements color conversion and scaling routines.
 
+## Tools
 
-If on Windows and building for Windows, use these instructions:
+* [ffmpeg](http://ffmpeg.org/ffmpeg.html) is a command line toolbox to
+  manipulate, convert and stream multimedia content.
+* [ffplay](http://ffmpeg.org/ffplay.html) is a minimalistic multimedia player.
+* [ffprobe](http://ffmpeg.org/ffprobe.html) is a simple analisys tool to inspect
+  multimedia content.
+* Additional small tools such as `aviocat`, `ismindex` and `qt-faststart`.
 
-https://ffmpeg.org/platform.html#Microsoft-Visual-C_002b_002b
+## Documentation
 
-Then except instead of ./configure, just run ./windows_x86-build.sh.
+The offline documentation is available in the **doc/** directory.
 
+The online documentation is available in the main [website](http://ffmpeg.org)
+and in the [wiki](http://trac.ffmpeg.org).
 
-If on Windows and building for Android, just run ./android-build.sh . Like for the
-Windows build, you may need real msys environment for that, and you may need
-to adjust some paths in android-build.sh.
+### Examples
 
-Errors
-==============
+Coding examples are available in the **doc/examples** directory.
 
-If you get `*** missing separator. Stop`, it's a line ending problem.  You can fix
-this by running the following commands (WARNING: this will delete all your changes.)
+## License
 
-    git config core.autocrlf false
-    git rm --cached -r .
-    git reset --hard
-
-This won't affect anything other than this repo, though.  See also
-[ffmpeg ticket #1209] (https://ffmpeg.org/trac/ffmpeg/ticket/1209).
+FFmpeg codebase is mainly LGPL-licensed with optional components licensed under
+GPL. Please refer to the LICENSE file for detailed information.

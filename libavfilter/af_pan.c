@@ -50,7 +50,7 @@ typedef struct PanContext {
 
     int pure_gains;
     /* channel mapping specific */
-    int channel_map[SWR_CH_MAX];
+    int channel_map[MAX_CHANNELS];
     struct SwrContext *swr;
 } PanContext;
 
@@ -271,11 +271,11 @@ static int config_props(AVFilterLink *link)
 
     // sanity check; can't be done in query_formats since the inlink
     // channel layout is unknown at that time
-    if (link->channels > SWR_CH_MAX ||
-        pan->nb_output_channels > SWR_CH_MAX) {
+    if (link->channels > MAX_CHANNELS ||
+        pan->nb_output_channels > MAX_CHANNELS) {
         av_log(ctx, AV_LOG_ERROR,
-               "libswresample support a maximum of %d channels. "
-               "Feel free to ask for a higher limit.\n", SWR_CH_MAX);
+               "af_pan support a maximum of %d channels. "
+               "Feel free to ask for a higher limit.\n", MAX_CHANNELS);
         return AVERROR_PATCHWELCOME;
     }
 
@@ -286,10 +286,14 @@ static int config_props(AVFilterLink *link)
                                   0, ctx);
     if (!pan->swr)
         return AVERROR(ENOMEM);
-    if (!link->channel_layout)
-        av_opt_set_int(pan->swr, "ich", link->channels, 0);
-    if (!pan->out_channel_layout)
-        av_opt_set_int(pan->swr, "och", pan->nb_output_channels, 0);
+    if (!link->channel_layout) {
+        if (av_opt_set_int(pan->swr, "ich", link->channels, 0) < 0)
+            return AVERROR(EINVAL);
+    }
+    if (!pan->out_channel_layout) {
+        if (av_opt_set_int(pan->swr, "och", pan->nb_output_channels, 0) < 0)
+            return AVERROR(EINVAL);
+    }
 
     // gains are pure, init the channel mapping
     if (pan->pure_gains) {
@@ -370,7 +374,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 
     if (!outsamples)
         return AVERROR(ENOMEM);
-    swr_convert(pan->swr, outsamples->data, n, (void *)insamples->data, n);
+    swr_convert(pan->swr, outsamples->extended_data, n,
+                (void *)insamples->extended_data, n);
     av_frame_copy_props(outsamples, insamples);
     outsamples->channel_layout = outlink->channel_layout;
     av_frame_set_channels(outsamples, outlink->channels);

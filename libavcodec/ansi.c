@@ -90,9 +90,11 @@ static av_cold int decode_init(AVCodecContext *avctx)
     s->fg          = DEFAULT_FG_COLOR;
     s->bg          = DEFAULT_BG_COLOR;
 
-    if (!avctx->width || !avctx->height)
-        ff_set_dimensions(avctx, 80 << 3, 25 << 4);
-
+    if (!avctx->width || !avctx->height) {
+        int ret = ff_set_dimensions(avctx, 80 << 3, 25 << 4);
+        if (ret < 0)
+            return ret;
+    }
     return 0;
 }
 
@@ -420,7 +422,7 @@ static int decode_frame(AVCodecContext *avctx,
             switch(buf[0]) {
             case '0': case '1': case '2': case '3': case '4':
             case '5': case '6': case '7': case '8': case '9':
-                if (s->nb_args < MAX_NB_ARGS)
+                if (s->nb_args < MAX_NB_ARGS && s->args[s->nb_args] < 6553)
                     s->args[s->nb_args] = FFMAX(s->args[s->nb_args], 0) * 10 + buf[0] - '0';
                 break;
             case ';':

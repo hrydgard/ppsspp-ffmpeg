@@ -26,7 +26,7 @@
  *
  * Show how to use the libavformat and libavcodec API to demux and
  * decode audio and video data.
- * @example doc/examples/demuxing_decoding.c
+ * @example demuxing_decoding.c
  */
 
 #include <libavutil/imgutils.h>
@@ -279,7 +279,7 @@ int main (int argc, char **argv)
         audio_dec_ctx = audio_stream->codec;
         audio_dst_file = fopen(audio_dst_filename, "wb");
         if (!audio_dst_file) {
-            fprintf(stderr, "Could not open destination file %s\n", video_dst_filename);
+            fprintf(stderr, "Could not open destination file %s\n", audio_dst_filename);
             ret = 1;
             goto end;
         }

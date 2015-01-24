@@ -41,7 +41,7 @@
 #include "video.h"
 #include "avcodec.h"
 
-typedef struct {
+typedef struct BufferSourceContext {
     const AVClass    *class;
     AVFifoBuffer     *fifo;
     AVRational        time_base;     ///< time_base to set in the output link
@@ -98,7 +98,7 @@ int attribute_align_arg av_buffersrc_add_frame_flags(AVFilterContext *ctx, AVFra
 
     if (frame && frame->channel_layout &&
         av_get_channel_layout_nb_channels(frame->channel_layout) != av_frame_get_channels(frame)) {
-        av_log(0, AV_LOG_ERROR, "Layout indicates a different number of channels than actually present\n");
+        av_log(ctx, AV_LOG_ERROR, "Layout indicates a different number of channels than actually present\n");
         return AVERROR(EINVAL);
     }
 
@@ -120,7 +120,7 @@ static int av_buffersrc_add_frame_internal(AVFilterContext *ctx,
 {
     BufferSourceContext *s = ctx->priv;
     AVFrame *copy;
-    int ret;
+    int refcounted, ret;
 
     s->nb_failed_requests = 0;
 
@@ -129,6 +129,8 @@ static int av_buffersrc_add_frame_internal(AVFilterContext *ctx,
         return 0;
     } else if (s->eof)
         return AVERROR(EINVAL);
+
+    refcounted = !!frame->buf[0];
 
     if (!(flags & AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT)) {
 
@@ -157,10 +159,20 @@ static int av_buffersrc_add_frame_internal(AVFilterContext *ctx,
 
     if (!(copy = av_frame_alloc()))
         return AVERROR(ENOMEM);
-    av_frame_move_ref(copy, frame);
+
+    if (refcounted) {
+        av_frame_move_ref(copy, frame);
+    } else {
+        ret = av_frame_ref(copy, frame);
+        if (ret < 0) {
+            av_frame_free(&copy);
+            return ret;
+        }
+    }
 
     if ((ret = av_fifo_generic_write(s->fifo, &copy, sizeof(copy), NULL)) < 0) {
-        av_frame_move_ref(frame, copy);
+        if (refcounted)
+            av_frame_move_ref(frame, copy);
         av_frame_free(&copy);
         return ret;
     }
@@ -259,7 +271,7 @@ do {                                                                    \
 
         if (planes > FF_ARRAY_ELEMS(frame->buf)) {
             frame->nb_extended_buf = planes - FF_ARRAY_ELEMS(frame->buf);
-            frame->extended_buf = av_mallocz(sizeof(*frame->extended_buf) *
+            frame->extended_buf = av_mallocz_array(sizeof(*frame->extended_buf),
                                              frame->nb_extended_buf);
             if (!frame->extended_buf) {
                 ret = AVERROR(ENOMEM);
@@ -367,13 +379,13 @@ static av_cold int init_audio(AVFilterContext *ctx)
 
     if (s->channel_layout_str) {
         int n;
-        /* TODO reindent */
-    s->channel_layout = av_get_channel_layout(s->channel_layout_str);
-    if (!s->channel_layout) {
-        av_log(ctx, AV_LOG_ERROR, "Invalid channel layout %s.\n",
-               s->channel_layout_str);
-        return AVERROR(EINVAL);
-    }
+
+        s->channel_layout = av_get_channel_layout(s->channel_layout_str);
+        if (!s->channel_layout) {
+            av_log(ctx, AV_LOG_ERROR, "Invalid channel layout %s.\n",
+                   s->channel_layout_str);
+            return AVERROR(EINVAL);
+        }
         n = av_get_channel_layout_nb_channels(s->channel_layout);
         if (s->channels) {
             if (n != s->channels) {
@@ -414,8 +426,7 @@ static av_cold void uninit(AVFilterContext *ctx)
         av_fifo_generic_read(s->fifo, &frame, sizeof(frame), NULL);
         av_frame_free(&frame);
     }
-    av_fifo_free(s->fifo);
-    s->fifo = NULL;
+    av_fifo_freep(&s->fifo);
 }
 
 static int query_formats(AVFilterContext *ctx)

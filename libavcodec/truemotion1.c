@@ -317,9 +317,14 @@ static int truemotion1_decode_header(TrueMotion1Context *s)
     const uint8_t *sel_vector_table;
 
     header.header_size = ((s->buf[0] >> 5) | (s->buf[0] << 3)) & 0x7f;
-    if (s->buf[0] < 0x10 || header.header_size >= s->size)
+    if (s->buf[0] < 0x10)
     {
         av_log(s->avctx, AV_LOG_ERROR, "invalid header size (%d)\n", s->buf[0]);
+        return AVERROR_INVALIDDATA;
+    }
+
+    if (header.header_size + 1 > s->size) {
+        av_log(s->avctx, AV_LOG_ERROR, "Input packet too small.\n");
         return AVERROR_INVALIDDATA;
     }
 
@@ -406,6 +411,8 @@ static int truemotion1_decode_header(TrueMotion1Context *s)
 
         if ((ret = ff_set_dimensions(s->avctx, s->w, s->h)) < 0)
             return ret;
+
+        ff_set_sar(s->avctx, s->avctx->sample_aspect_ratio);
 
         av_fast_malloc(&s->vert_pred, &s->vert_pred_size, s->avctx->width * sizeof(unsigned int));
         if (!s->vert_pred)

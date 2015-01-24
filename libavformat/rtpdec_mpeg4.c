@@ -95,16 +95,16 @@ static PayloadContext *new_context(void)
 
 static void free_context(PayloadContext *data)
 {
-    av_free(data->au_headers);
-    av_free(data->mode);
-    av_free(data);
+    av_freep(&data->au_headers);
+    av_freep(&data->mode);
+    av_freep(&data);
 }
 
 static int parse_fmtp_config(AVCodecContext *codec, char *value)
 {
     /* decode the hexa encoded parameter */
     int len = ff_hex_to_data(NULL, value);
-    av_free(codec->extradata);
+    av_freep(&codec->extradata);
     if (ff_alloc_extradata(codec, len))
         return AVERROR(ENOMEM);
     ff_hex_to_data(codec->extradata, value);
@@ -208,7 +208,8 @@ static int aac_parse_packet(AVFormatContext *ctx, PayloadContext *data,
     return 0;
 }
 
-static int parse_fmtp(AVStream *stream, PayloadContext *data,
+static int parse_fmtp(AVFormatContext *s,
+                      AVStream *stream, PayloadContext *data,
                       char *attr, char *value)
 {
     AVCodecContext *codec = stream->codec;
@@ -246,7 +247,7 @@ static int parse_sdp_line(AVFormatContext *s, int st_index,
         return 0;
 
     if (av_strstart(line, "fmtp:", &p))
-        return ff_parse_fmtp(s->streams[st_index], data, p, parse_fmtp);
+        return ff_parse_fmtp(s, s->streams[st_index], data, p, parse_fmtp);
 
     return 0;
 }

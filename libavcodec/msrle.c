@@ -1,6 +1,6 @@
 /*
  * Microsoft RLE video decoder
- * Copyright (C) 2003 the ffmpeg project
+ * Copyright (c) 2003 The FFmpeg Project
  *
  * This file is part of FFmpeg.
  *
@@ -35,6 +35,7 @@
 #include "avcodec.h"
 #include "internal.h"
 #include "msrledec.h"
+#include "libavutil/imgutils.h"
 
 typedef struct MsrleContext {
     AVCodecContext *avctx;
@@ -54,7 +55,7 @@ static av_cold int msrle_decode_init(AVCodecContext *avctx)
 
     s->avctx = avctx;
 
-    switch (avctx->bits_per_coded_sample & 0x1f) {
+    switch (avctx->bits_per_coded_sample) {
     case 1:
         avctx->pix_fmt = AV_PIX_FMT_MONOWHITE;
         break;
@@ -110,10 +111,13 @@ static int msrle_decode_frame(AVCodecContext *avctx,
 
     /* FIXME how to correctly detect RLE ??? */
     if (avctx->height * istride == avpkt->size) { /* assume uncompressed */
-        int linesize = (avctx->width * avctx->bits_per_coded_sample + 7) / 8;
+        int linesize = av_image_get_linesize(avctx->pix_fmt, avctx->width, 0);
         uint8_t *ptr = s->frame->data[0];
         uint8_t *buf = avpkt->data + (avctx->height-1)*istride;
         int i, j;
+
+        if (linesize < 0)
+            return linesize;
 
         for (i = 0; i < avctx->height; i++) {
             if (avctx->bits_per_coded_sample == 4) {

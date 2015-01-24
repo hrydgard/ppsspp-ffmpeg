@@ -127,22 +127,12 @@ static const struct {
 
 extern const vf_info_t ff_vf_info_eq2;
 extern const vf_info_t ff_vf_info_eq;
-extern const vf_info_t ff_vf_info_fspp;
-extern const vf_info_t ff_vf_info_ilpack;
-extern const vf_info_t ff_vf_info_pp7;
 extern const vf_info_t ff_vf_info_softpulldown;
-extern const vf_info_t ff_vf_info_uspp;
-
 
 static const vf_info_t* const filters[]={
     &ff_vf_info_eq2,
     &ff_vf_info_eq,
-    &ff_vf_info_fspp,
-    &ff_vf_info_ilpack,
-    &ff_vf_info_pp7,
     &ff_vf_info_softpulldown,
-    &ff_vf_info_uspp,
-
     NULL
 };
 
@@ -210,7 +200,7 @@ int ff_mp_msg_test(int mod, int lev){
 
 void ff_init_avcodec(void)
 {
-    //we maybe should init but its kinda 1. unneeded 2. a bit inpolite from here
+    //we maybe should init but its kinda 1. unneeded 2. a bit impolite from here
 }
 
 //Exact copy of vf.c
@@ -473,8 +463,6 @@ int ff_vf_next_put_image(struct vf_instance *vf,mp_image_t *mpi, double pts){
 
     picref->width  = mpi->w;
     picref->height = mpi->h;
-
-    picref->type = AVMEDIA_TYPE_VIDEO;
 
     for(i=0; conversion_map[i].fmt && mpi->imgfmt != conversion_map[i].fmt; i++);
     picref->format = conversion_map[i].pix_fmt;

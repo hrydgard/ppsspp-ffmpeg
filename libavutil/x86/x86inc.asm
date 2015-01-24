@@ -5,7 +5,7 @@
 ;*
 ;* Authors: Loren Merritt <lorenm@u.washington.edu>
 ;*          Anton Mitrofanov <BugMaster@narod.ru>
-;*          Jason Garrett-Glaser <darkshikari@gmail.com>
+;*          Fiona Glaser <fiona@x264.com>
 ;*          Henrik Gramner <henrik@gramner.com>
 ;*
 ;* Permission to use, copy, modify, and/or distribute this software for any
@@ -98,9 +98,6 @@
         CPU %1
     %endif
 %endmacro
-
-; Always use long nops (reduces 0x90 spam in disassembly on x86_32)
-CPUNOP amdnop
 
 ; Macros to eliminate most code duplication between x86_32 and x86_64:
 ; Currently this works only for leaf functions which load all their arguments
@@ -759,19 +756,26 @@ SECTION .note.GNU-stack noalloc noexec nowrite progbits
 %define    cpuflag(x) ((cpuflags & (cpuflags_ %+ x)) == (cpuflags_ %+ x))
 %define notcpuflag(x) ((cpuflags & (cpuflags_ %+ x)) != (cpuflags_ %+ x))
 
-; Takes up to 2 cpuflags from the above list.
+; Takes an arbitrary number of cpuflags from the above list.
 ; All subsequent functions (up to the next INIT_CPUFLAGS) is built for the specified cpu.
 ; You shouldn't need to invoke this macro directly, it's a subroutine for INIT_MMX &co.
-%macro INIT_CPUFLAGS 0-2
-    CPUNOP amdnop
+%macro INIT_CPUFLAGS 0-*
+    %xdefine SUFFIX
+    %undef cpuname
+    %assign cpuflags 0
+
     %if %0 >= 1
-        %xdefine cpuname %1
-        %assign cpuflags cpuflags_%1
-        %if %0 >= 2
-            %xdefine cpuname %1_%2
-            %assign cpuflags cpuflags | cpuflags_%2
-        %endif
+        %rep %0
+            %ifdef cpuname
+                %xdefine cpuname cpuname %+ _%1
+            %else
+                %xdefine cpuname %1
+            %endif
+            %assign cpuflags cpuflags | cpuflags_%1
+            %rotate 1
+        %endrep
         %xdefine SUFFIX _ %+ cpuname
+
         %if cpuflag(avx)
             %assign avx_enabled 1
         %endif
@@ -782,23 +786,22 @@ SECTION .note.GNU-stack noalloc noexec nowrite progbits
         %endif
         %if cpuflag(aligned)
             %define movu mova
-        %elifidn %1, sse3
+        %elif cpuflag(sse3) && notcpuflag(ssse3)
             %define movu lddqu
         %endif
-        %if notcpuflag(sse2)
-            CPUNOP basicnop
-        %endif
+    %endif
+
+    %if cpuflag(sse2)
+        CPUNOP amdnop
     %else
-        %xdefine SUFFIX
-        %undef cpuname
-        %undef cpuflags
+        CPUNOP basicnop
     %endif
 %endmacro
 
 ; Merge mmx and sse*
-; m# is a simd regsiter of the currently selected size
-; xm# is the corresponding xmmreg (if selcted xmm or ymm size), or mmreg (if selected mmx)
-; ym# is the corresponding ymmreg (if selcted xmm or ymm size), or mmreg (if selected mmx)
+; m# is a simd register of the currently selected size
+; xm# is the corresponding xmm register if mmsize >= 16, otherwise the same as m#
+; ym# is the corresponding ymm register if mmsize >= 32, otherwise the same as m#
 ; (All 3 remain in sync through SWAP.)
 
 %macro CAT_XDEFINE 3
@@ -821,12 +824,12 @@ SECTION .note.GNU-stack noalloc noexec nowrite progbits
     %assign %%i 0
     %rep 8
     CAT_XDEFINE m, %%i, mm %+ %%i
-    CAT_XDEFINE nmm, %%i, %%i
+    CAT_XDEFINE nnmm, %%i, %%i
     %assign %%i %%i+1
     %endrep
     %rep 8
     CAT_UNDEF m, %%i
-    CAT_UNDEF nmm, %%i
+    CAT_UNDEF nnmm, %%i
     %assign %%i %%i+1
     %endrep
     INIT_CPUFLAGS %1
@@ -847,7 +850,7 @@ SECTION .note.GNU-stack noalloc noexec nowrite progbits
     %assign %%i 0
     %rep num_mmregs
     CAT_XDEFINE m, %%i, xmm %+ %%i
-    CAT_XDEFINE nxmm, %%i, %%i
+    CAT_XDEFINE nnxmm, %%i, %%i
     %assign %%i %%i+1
     %endrep
     INIT_CPUFLAGS %1
@@ -892,7 +895,7 @@ INIT_XMM
     %define xmmxmm%1 xmm%1
     %define xmmymm%1 xmm%1
     %define ymmmm%1   mm%1
-    %define ymmxmm%1 ymm%1
+    %define ymmxmm%1 xmm%1
     %define ymmymm%1 ymm%1
     %define xm%1 xmm %+ m%1
     %define ym%1 ymm %+ m%1
@@ -925,7 +928,7 @@ INIT_XMM
 %endrep
 %rep %0/2
     %xdefine m%1 %%tmp%2
-    CAT_XDEFINE n, m%1, %1
+    CAT_XDEFINE nn, m%1, %1
     %rotate 2
 %endrep
 %endmacro
@@ -943,16 +946,16 @@ INIT_XMM
         %xdefine %%tmp m%1
         %xdefine m%1 m%2
         %xdefine m%2 %%tmp
-        CAT_XDEFINE n, m%1, %1
-        CAT_XDEFINE n, m%2, %2
+        CAT_XDEFINE nn, m%1, %1
+        CAT_XDEFINE nn, m%2, %2
     %rotate 1
     %endrep
 %endmacro
 
 %macro SWAP_INTERNAL_NAME 2-*
-    %xdefine %%args n %+ %1
+    %xdefine %%args nn %+ %1
     %rep %0-1
-        %xdefine %%args %%args, n %+ %2
+        %xdefine %%args %%args, nn %+ %2
     %rotate 1
     %endrep
     SWAP_INTERNAL_NUM %%args
@@ -979,7 +982,7 @@ INIT_XMM
         %assign %%i 0
         %rep num_mmregs
             CAT_XDEFINE m, %%i, %1_m %+ %%i
-            CAT_XDEFINE n, m %+ %%i, %%i
+            CAT_XDEFINE nn, m %+ %%i, %%i
         %assign %%i %%i+1
         %endrep
     %endif
@@ -1058,25 +1061,25 @@ INIT_XMM
 ;%5+: operands
 %macro RUN_AVX_INSTR 5-8+
     %ifnum sizeof%6
-        %assign %%sizeofreg sizeof%6
+        %assign __sizeofreg sizeof%6
     %elifnum sizeof%5
-        %assign %%sizeofreg sizeof%5
+        %assign __sizeofreg sizeof%5
     %else
-        %assign %%sizeofreg mmsize
+        %assign __sizeofreg mmsize
     %endif
-    %assign %%emulate_avx 0
-    %if avx_enabled && %%sizeofreg >= 16
-        %xdefine %%instr v%1
+    %assign __emulate_avx 0
+    %if avx_enabled && __sizeofreg >= 16
+        %xdefine __instr v%1
     %else
-        %xdefine %%instr %1
+        %xdefine __instr %1
         %if %0 >= 7+%3
-            %assign %%emulate_avx 1
+            %assign __emulate_avx 1
         %endif
     %endif
 
-    %if %%emulate_avx
-        %xdefine %%src1 %6
-        %xdefine %%src2 %7
+    %if __emulate_avx
+        %xdefine __src1 %6
+        %xdefine __src2 %7
         %ifnidn %5, %6
             %if %0 >= 8
                 CHECK_AVX_INSTR_EMU {%1 %5, %6, %7, %8}, %5, %7, %8
@@ -1088,31 +1091,31 @@ INIT_XMM
                     ; 3-operand AVX instructions with a memory arg can only have it in src2,
                     ; whereas SSE emulation prefers to have it in src1 (i.e. the mov).
                     ; So, if the instruction is commutative with a memory arg, swap them.
-                    %xdefine %%src1 %7
-                    %xdefine %%src2 %6
+                    %xdefine __src1 %7
+                    %xdefine __src2 %6
                 %endif
             %endif
-            %if %%sizeofreg == 8
-                MOVQ %5, %%src1
+            %if __sizeofreg == 8
+                MOVQ %5, __src1
             %elif %2
-                MOVAPS %5, %%src1
+                MOVAPS %5, __src1
             %else
-                MOVDQA %5, %%src1
+                MOVDQA %5, __src1
             %endif
         %endif
         %if %0 >= 8
-            %1 %5, %%src2, %8
+            %1 %5, __src2, %8
         %else
-            %1 %5, %%src2
+            %1 %5, __src2
         %endif
     %elif %0 >= 8
-        %%instr %5, %6, %7, %8
+        __instr %5, %6, %7, %8
     %elif %0 == 7
-        %%instr %5, %6, %7
+        __instr %5, %6, %7
     %elif %0 == 6
-        %%instr %5, %6
+        __instr %5, %6
     %else
-        %%instr %5
+        __instr %5
     %endif
 %endmacro
 
@@ -1406,21 +1409,6 @@ AVX_INSTR pfmul, 1, 0, 1
 %endrep
 %undef i
 %undef j
-
-%macro FMA_INSTR 3
-    %macro %1 4-7 %1, %2, %3
-        %if cpuflag(xop)
-            v%5 %1, %2, %3, %4
-        %else
-            %6 %1, %2, %3
-            %7 %1, %4
-        %endif
-    %endmacro
-%endmacro
-
-FMA_INSTR  pmacsdd,  pmulld, paddd
-FMA_INSTR  pmacsww,  pmullw, paddw
-FMA_INSTR pmadcswd, pmaddwd, paddd
 
 ; tzcnt is equivalent to "rep bsf" and is backwards-compatible with bsf.
 ; This lets us use tzcnt without bumping the yasm version requirement yet.

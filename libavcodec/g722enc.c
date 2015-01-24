@@ -75,9 +75,9 @@ static av_cold int g722_encode_init(AVCodecContext * avctx)
         int max_paths = frontier * FREEZE_INTERVAL;
         int i;
         for (i = 0; i < 2; i++) {
-            c->paths[i] = av_mallocz(max_paths * sizeof(**c->paths));
-            c->node_buf[i] = av_mallocz(2 * frontier * sizeof(**c->node_buf));
-            c->nodep_buf[i] = av_mallocz(2 * frontier * sizeof(**c->nodep_buf));
+            c->paths[i] = av_mallocz_array(max_paths, sizeof(**c->paths));
+            c->node_buf[i] = av_mallocz_array(frontier, 2 * sizeof(**c->node_buf));
+            c->nodep_buf[i] = av_mallocz_array(frontier, 2 * sizeof(**c->nodep_buf));
             if (!c->paths[i] || !c->node_buf[i] || !c->nodep_buf[i]) {
                 ret = AVERROR(ENOMEM);
                 goto error;
@@ -107,7 +107,7 @@ static av_cold int g722_encode_init(AVCodecContext * avctx)
            a common packet size for VoIP applications */
         avctx->frame_size = 320;
     }
-    avctx->delay = 22;
+    avctx->initial_padding = 22;
 
     if (avctx->trellis) {
         /* validate trellis */
@@ -374,7 +374,7 @@ static int g722_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     }
 
     if (frame->pts != AV_NOPTS_VALUE)
-        avpkt->pts = frame->pts - ff_samples_to_time_base(avctx, avctx->delay);
+        avpkt->pts = frame->pts - ff_samples_to_time_base(avctx, avctx->initial_padding);
     *got_packet_ptr = 1;
     return 0;
 }

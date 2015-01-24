@@ -69,6 +69,7 @@ int av_reduce(int *dst_num, int *dst_den,
         den = next_den;
     }
     av_assert2(av_gcd(a1.num, a1.den) <= 1U);
+    av_assert2(a1.num <= max && a1.den <= max);
 
     *dst_num = sign ? -a1.num : a1.num;
     *dst_den = a1.den;
@@ -167,6 +168,36 @@ int main(void)
                     r = av_sub_q(av_add_q(b,a), b);
                     if(b.den && (r.num*a.den != a.num*r.den || !r.num != !a.num || !r.den != !a.den))
                         av_log(NULL, AV_LOG_ERROR, "%d/%d ", r.num, r.den);
+                }
+            }
+        }
+    }
+
+    for (a.num = 1; a.num <= 10; a.num++) {
+        for (a.den = 1; a.den <= 10; a.den++) {
+            if (av_gcd(a.num, a.den) > 1)
+                continue;
+            for (b.num = 1; b.num <= 10; b.num++) {
+                for (b.den = 1; b.den <= 10; b.den++) {
+                    int start;
+                    if (av_gcd(b.num, b.den) > 1)
+                        continue;
+                    if (av_cmp_q(b, a) < 0)
+                        continue;
+                    for (start = 0; start < 10 ; start++) {
+                        int acc= start;
+                        int i;
+
+                        for (i = 0; i<100; i++) {
+                            int exact = start + av_rescale_q(i+1, b, a);
+                            acc = av_add_stable(a, acc, b, 1);
+                            if (FFABS(acc - exact) > 2) {
+                                av_log(NULL, AV_LOG_ERROR, "%d/%d %d/%d, %d %d\n", a.num,
+                                       a.den, b.num, b.den, acc, exact);
+                                return 1;
+                            }
+                        }
+                    }
                 }
             }
         }

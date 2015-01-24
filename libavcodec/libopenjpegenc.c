@@ -93,7 +93,7 @@ static opj_image_t *mj2_create_image(AVCodecContext *avctx, opj_cparameters_t *p
 
     switch (avctx->pix_fmt) {
     case AV_PIX_FMT_GRAY8:
-    case AV_PIX_FMT_GRAY8A:
+    case AV_PIX_FMT_YA8:
     case AV_PIX_FMT_GRAY16:
         color_space = CLRSPC_GRAY;
         break;
@@ -233,14 +233,6 @@ static av_cold int libopenjpeg_encode_init(AVCodecContext *avctx)
         err = AVERROR(EINVAL);
         goto fail;
     }
-    opj_setup_encoder(ctx->compress, &ctx->enc_params, ctx->image);
-
-    ctx->stream = opj_cio_open((opj_common_ptr)ctx->compress, NULL, 0);
-    if (!ctx->stream) {
-        av_log(avctx, AV_LOG_ERROR, "Error creating the cio stream\n");
-        err = AVERROR(ENOMEM);
-        goto fail;
-    }
 
     avctx->coded_frame = av_frame_alloc();
     if (!avctx->coded_frame) {
@@ -252,13 +244,11 @@ static av_cold int libopenjpeg_encode_init(AVCodecContext *avctx)
     ctx->event_mgr.info_handler    = info_callback;
     ctx->event_mgr.error_handler = error_callback;
     ctx->event_mgr.warning_handler = warning_callback;
-    opj_set_event_mgr((opj_common_ptr)ctx->compress, &ctx->event_mgr, avctx);
+    opj_set_event_mgr((opj_common_ptr) ctx->compress, &ctx->event_mgr, avctx);
 
     return 0;
 
 fail:
-    opj_cio_close(ctx->stream);
-    ctx->stream = NULL;
     opj_destroy_compress(ctx->compress);
     ctx->compress = NULL;
     opj_image_destroy(ctx->image);
@@ -310,12 +300,11 @@ static int libopenjpeg_copy_packed8(AVCodecContext *avctx, const AVFrame *frame,
 static int libopenjpeg_copy_packed12(AVCodecContext *avctx, const AVFrame *frame, opj_image_t *image)
 {
     int compno;
-    int x;
-    int y;
+    int x, y;
     int *image_line;
     int frame_index;
-    const int numcomps = image->numcomps;
-    uint16_t *frame_ptr = (uint16_t*)frame->data[0];
+    const int numcomps  = image->numcomps;
+    uint16_t *frame_ptr = (uint16_t *)frame->data[0];
 
     for (compno = 0; compno < numcomps; ++compno) {
         if (image->comps[compno].w > frame->linesize[0] / numcomps) {
@@ -406,7 +395,7 @@ static int libopenjpeg_copy_unpacked8(AVCodecContext *avctx, const AVFrame *fram
     }
 
     for (compno = 0; compno < numcomps; ++compno) {
-        width = avctx->width / image->comps[compno].dx;
+        width  = avctx->width / image->comps[compno].dx;
         height = avctx->height / image->comps[compno].dy;
         for (y = 0; y < height; ++y) {
             image_line = image->comps[compno].data + y * image->comps[compno].w;
@@ -448,9 +437,9 @@ static int libopenjpeg_copy_unpacked16(AVCodecContext *avctx, const AVFrame *fra
     }
 
     for (compno = 0; compno < numcomps; ++compno) {
-        width = avctx->width / image->comps[compno].dx;
-        height = avctx->height / image->comps[compno].dy;
-        frame_ptr = (uint16_t*)frame->data[compno];
+        width     = avctx->width / image->comps[compno].dx;
+        height    = avctx->height / image->comps[compno].dy;
+        frame_ptr = (uint16_t *)frame->data[compno];
         for (y = 0; y < height; ++y) {
             image_line = image->comps[compno].data + y * image->comps[compno].w;
             frame_index = y * (frame->linesize[compno] / 2);
@@ -475,9 +464,9 @@ static int libopenjpeg_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                                     const AVFrame *frame, int *got_packet)
 {
     LibOpenJPEGContext *ctx = avctx->priv_data;
-    opj_cinfo_t *compress = ctx->compress;
-    opj_image_t *image    = ctx->image;
-    opj_cio_t *stream     = ctx->stream;
+    opj_cinfo_t *compress   = ctx->compress;
+    opj_image_t *image      = ctx->image;
+    opj_cio_t *stream       = ctx->stream;
     int cpyresult = 0;
     int ret, len;
     AVFrame *gbrframe;
@@ -485,7 +474,7 @@ static int libopenjpeg_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     switch (avctx->pix_fmt) {
     case AV_PIX_FMT_RGB24:
     case AV_PIX_FMT_RGBA:
-    case AV_PIX_FMT_GRAY8A:
+    case AV_PIX_FMT_YA8:
         cpyresult = libopenjpeg_copy_packed8(avctx, frame, image);
         break;
     case AV_PIX_FMT_XYZ12:
@@ -501,10 +490,9 @@ static int libopenjpeg_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     case AV_PIX_FMT_GBRP12:
     case AV_PIX_FMT_GBRP14:
     case AV_PIX_FMT_GBRP16:
-        gbrframe = av_frame_alloc();
+        gbrframe = av_frame_clone(frame);
         if (!gbrframe)
             return AVERROR(ENOMEM);
-        av_frame_ref(gbrframe, frame);
         gbrframe->data[0] = frame->data[2]; // swap to be rgb
         gbrframe->data[1] = frame->data[0];
         gbrframe->data[2] = frame->data[1];
@@ -571,7 +559,14 @@ static int libopenjpeg_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         return -1;
     }
 
-    cio_seek(stream, 0);
+    opj_setup_encoder(compress, &ctx->enc_params, image);
+
+    stream = opj_cio_open((opj_common_ptr) compress, NULL, 0);
+    if (!stream) {
+        av_log(avctx, AV_LOG_ERROR, "Error creating the cio stream\n");
+        return AVERROR(ENOMEM);
+    }
+
     if (!opj_encode(compress, stream, image, NULL)) {
         av_log(avctx, AV_LOG_ERROR, "Error during the opj encode\n");
         return -1;
@@ -647,12 +642,12 @@ AVCodec ff_libopenjpeg_encoder = {
     .init           = libopenjpeg_encode_init,
     .encode2        = libopenjpeg_encode_frame,
     .close          = libopenjpeg_encode_close,
-    .capabilities   = 0,
+    .capabilities   = CODEC_CAP_FRAME_THREADS | CODEC_CAP_INTRA_ONLY,
     .pix_fmts       = (const enum AVPixelFormat[]) {
-        AV_PIX_FMT_RGB24, AV_PIX_FMT_RGBA, AV_PIX_FMT_RGB48, AV_PIX_FMT_RGBA64,
-        AV_PIX_FMT_GBR24P,
+        AV_PIX_FMT_RGB24, AV_PIX_FMT_RGBA, AV_PIX_FMT_RGB48,
+        AV_PIX_FMT_RGBA64, AV_PIX_FMT_GBR24P,
         AV_PIX_FMT_GBRP9, AV_PIX_FMT_GBRP10, AV_PIX_FMT_GBRP12, AV_PIX_FMT_GBRP14, AV_PIX_FMT_GBRP16,
-        AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY8A, AV_PIX_FMT_GRAY16,
+        AV_PIX_FMT_GRAY8, AV_PIX_FMT_YA8, AV_PIX_FMT_GRAY16,
         AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUVA420P,
         AV_PIX_FMT_YUV440P, AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVA422P,
         AV_PIX_FMT_YUV411P, AV_PIX_FMT_YUV410P, AV_PIX_FMT_YUVA444P,

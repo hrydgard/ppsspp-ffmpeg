@@ -62,7 +62,7 @@ int ff_neterrno(void);
 #include <netdb.h>
 
 #define ff_neterrno() AVERROR(errno)
-#endif
+#endif /* HAVE_WINSOCK2_H */
 
 #if HAVE_ARPA_INET_H
 #include <arpa/inet.h>
@@ -104,11 +104,23 @@ struct sockaddr_storage {
     uint8_t ss_family;
 #else
     uint16_t ss_family;
-#endif
+#endif /* HAVE_STRUCT_SOCKADDR_SA_LEN */
     char ss_pad1[6];
     int64_t ss_align;
     char ss_pad2[112];
 };
+#endif /* !HAVE_STRUCT_SOCKADDR_STORAGE */
+
+typedef union sockaddr_union {
+    struct sockaddr_storage storage;
+    struct sockaddr_in in;
+#if HAVE_STRUCT_SOCKADDR_IN6
+    struct sockaddr_in6 in6;
+#endif
+} sockaddr_union;
+
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
 #endif
 
 #if !HAVE_STRUCT_ADDRINFO
@@ -122,7 +134,7 @@ struct addrinfo {
     char *ai_canonname;
     struct addrinfo *ai_next;
 };
-#endif
+#endif /* !HAVE_STRUCT_ADDRINFO */
 
 /* getaddrinfo constants */
 #ifndef EAI_AGAIN
@@ -195,12 +207,13 @@ int ff_getnameinfo(const struct sockaddr *sa, int salen,
 #define getaddrinfo ff_getaddrinfo
 #define freeaddrinfo ff_freeaddrinfo
 #define getnameinfo ff_getnameinfo
-#endif
+#endif /* !HAVE_GETADDRINFO */
+
 #if !HAVE_GETADDRINFO || HAVE_WINSOCK2_H
 const char *ff_gai_strerror(int ecode);
 #undef gai_strerror
 #define gai_strerror ff_gai_strerror
-#endif
+#endif /* !HAVE_GETADDRINFO || HAVE_WINSOCK2_H */
 
 #ifndef INADDR_LOOPBACK
 #define INADDR_LOOPBACK 0x7f000001

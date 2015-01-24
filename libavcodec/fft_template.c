@@ -32,9 +32,9 @@
 #include "fft.h"
 #include "fft-internal.h"
 
-#if CONFIG_FFT_FIXED_32
+#if FFT_FIXED_32
 #include "fft_table.h"
-#else /* CONFIG_FFT_FIXED_32 */
+#else /* FFT_FIXED_32 */
 
 /* cos(2*pi*x/n) for 0<=x<=n/4, followed by its reverse */
 #if !CONFIG_HARDCODED_TABLES
@@ -69,7 +69,7 @@ COSTABLE_CONST FFTSample * const FFT_NAME(ff_cos_tabs)[] = {
     FFT_NAME(ff_cos_65536),
 };
 
-#endif /* CONFIG_FFT_FIXED_32 */
+#endif /* FFT_FIXED_32 */
 
 static void fft_permute_c(FFTContext *s, FFTComplex *z);
 static void fft_calc_c(FFTContext *s, FFTComplex *z);
@@ -87,7 +87,7 @@ static int split_radix_permutation(int i, int n, int inverse)
 
 av_cold void ff_init_ff_cos_tabs(int index)
 {
-#if (!CONFIG_HARDCODED_TABLES) && (!CONFIG_FFT_FIXED_32)
+#if (!CONFIG_HARDCODED_TABLES) && (!FFT_FIXED_32)
     int i;
     int m = 1<<index;
     double freq = 2*M_PI/m;
@@ -163,13 +163,14 @@ av_cold int ff_fft_init(FFTContext *s, int nbits, int inverse)
     s->mdct_calc   = ff_mdct_calc_c;
 #endif
 
-#if CONFIG_FFT_FIXED_32
+#if FFT_FIXED_32
     {
         int n=0;
-        ff_fft_lut_init(fft_offsets_lut, 0, 1 << 16, &n);
+        ff_fft_lut_init(ff_fft_offsets_lut, 0, 1 << 16, &n);
     }
-#else /* CONFIG_FFT_FIXED_32 */
-#if CONFIG_FFT_FLOAT
+#else /* FFT_FIXED_32 */
+#if FFT_FLOAT
+    if (ARCH_AARCH64) ff_fft_init_aarch64(s);
     if (ARCH_ARM)     ff_fft_init_arm(s);
     if (ARCH_PPC)     ff_fft_init_ppc(s);
     if (ARCH_X86)     ff_fft_init_x86(s);
@@ -182,7 +183,7 @@ av_cold int ff_fft_init(FFTContext *s, int nbits, int inverse)
     for(j=4; j<=nbits; j++) {
         ff_init_ff_cos_tabs(j);
     }
-#endif /* CONFIG_FFT_FIXED_32 */
+#endif /* FFT_FIXED_32 */
 
 
     if (s->fft_permutation == FF_FFT_PERM_AVX) {
@@ -219,7 +220,7 @@ av_cold void ff_fft_end(FFTContext *s)
     av_freep(&s->tmp_buf);
 }
 
-#if CONFIG_FFT_FIXED_32
+#if FFT_FIXED_32
 
 static void fft_calc_c(FFTContext *s, FFTComplex *z) {
 
@@ -227,15 +228,13 @@ static void fft_calc_c(FFTContext *s, FFTComplex *z) {
     int n4, n2, n34;
     FFTSample tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8;
     FFTComplex *tmpz;
-    FFTSample w_re, w_im;
-    FFTSample *w_re_ptr, *w_im_ptr;
     const int fft_size = (1 << s->nbits);
     int64_t accu;
 
     num_transforms = (0x2aab >> (16 - s->nbits)) | 1;
 
     for (n=0; n<num_transforms; n++){
-        offset = fft_offsets_lut[n] << 2;
+        offset = ff_fft_offsets_lut[n] << 2;
         tmpz = z + offset;
 
         tmp1 = tmpz[0].re + tmpz[1].re;
@@ -263,7 +262,7 @@ static void fft_calc_c(FFTContext *s, FFTComplex *z) {
     num_transforms = (num_transforms >> 1) | 1;
 
     for (n=0; n<num_transforms; n++){
-        offset = fft_offsets_lut[n] << 3;
+        offset = ff_fft_offsets_lut[n] << 3;
         tmpz = z + offset;
 
         tmp1 = tmpz[4].re + tmpz[5].re;
@@ -321,7 +320,9 @@ static void fft_calc_c(FFTContext *s, FFTComplex *z) {
         num_transforms = (num_transforms >> 1) | 1;
 
         for (n=0; n<num_transforms; n++){
-            offset = fft_offsets_lut[n] << nbits;
+            const FFTSample *w_re_ptr = ff_w_tab_sr + step;
+            const FFTSample *w_im_ptr = ff_w_tab_sr + MAX_FFT_SIZE/(4*16) - step;
+            offset = ff_fft_offsets_lut[n] << nbits;
             tmpz = z + offset;
 
             tmp5 = tmpz[ n2].re + tmpz[n34].re;
@@ -338,12 +339,9 @@ static void fft_calc_c(FFTContext *s, FFTComplex *z) {
             tmpz[n34].im = tmpz[n4].im + tmp1;
             tmpz[ n4].im = tmpz[n4].im - tmp1;
 
-            w_re_ptr = w_tab_sr + step;
-            w_im_ptr = w_tab_sr + MAX_FFT_SIZE/(4*16) - step;
-
             for (i=1; i<n4; i++){
-                w_re = w_re_ptr[0];
-                w_im = w_im_ptr[0];
+                FFTSample w_re = w_re_ptr[0];
+                FFTSample w_im = w_im_ptr[0];
                 accu  = (int64_t)w_re*tmpz[ n2+i].re;
                 accu += (int64_t)w_im*tmpz[ n2+i].im;
                 tmp1 = (int32_t)((accu + 0x40000000) >> 31);
@@ -380,7 +378,7 @@ static void fft_calc_c(FFTContext *s, FFTComplex *z) {
     }
 }
 
-#else /* CONFIG_FFT_FIXED_32 */
+#else /* FFT_FIXED_32 */
 
 #define BUTTERFLIES(a0,a1,a2,a3) {\
     BF(t3, t5, t5, t1);\
@@ -527,4 +525,4 @@ static void fft_calc_c(FFTContext *s, FFTComplex *z)
 {
     fft_dispatch[s->nbits-2](z);
 }
-#endif /* CONFIG_FFT_FIXED_32 */
+#endif /* FFT_FIXED_32 */

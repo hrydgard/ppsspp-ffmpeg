@@ -72,10 +72,12 @@ void ff_register_rtp_dynamic_payload_handlers(void)
     ff_register_dynamic_payload_handler(&ff_g726_24_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_g726_32_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_g726_40_dynamic_handler);
+    ff_register_dynamic_payload_handler(&ff_h261_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_h263_1998_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_h263_2000_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_h263_rfc2190_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_h264_dynamic_handler);
+    ff_register_dynamic_payload_handler(&ff_hevc_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_ilbc_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_jpeg_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_mp4a_latm_dynamic_handler);
@@ -141,7 +143,7 @@ static int rtcp_parse_packet(RTPDemuxContext *s, const unsigned char *buf,
                 return AVERROR_INVALIDDATA;
             }
 
-            s->last_rtcp_reception_time = av_gettime();
+            s->last_rtcp_reception_time = av_gettime_relative();
             s->last_rtcp_ntp_time  = AV_RB64(buf + 8);
             s->last_rtcp_timestamp = AV_RB32(buf + 16);
             if (s->first_rtcp_ntp_time == AV_NOPTS_VALUE) {
@@ -321,7 +323,7 @@ int ff_rtp_check_and_send_back_rr(RTPDemuxContext *s, URLContext *fd,
         avio_wb32(pb, 0); /* delay since last SR */
     } else {
         uint32_t middle_32_bits   = s->last_rtcp_ntp_time >> 16; // this is valid, right? do we need to handle 64 bit values special?
-        uint32_t delay_since_last = av_rescale(av_gettime() - s->last_rtcp_reception_time,
+        uint32_t delay_since_last = av_rescale(av_gettime_relative() - s->last_rtcp_reception_time,
                                                65536, AV_TIME_BASE);
 
         avio_wb32(pb, middle_32_bits); /* last SR timestamp */
@@ -446,7 +448,7 @@ int ff_rtp_send_rtcp_feedback(RTPDemuxContext *s, URLContext *fd,
     /* Send new feedback if enough time has elapsed since the last
      * feedback packet. */
 
-    now = av_gettime();
+    now = av_gettime_relative();
     if (s->last_feedback_time &&
         (now - s->last_feedback_time) < MIN_FEEDBACK_INTERVAL)
         return 0;
@@ -664,8 +666,8 @@ void ff_rtp_reset_packet_queue(RTPDemuxContext *s)
 {
     while (s->queue) {
         RTPPacket *next = s->queue->next;
-        av_free(s->queue->buf);
-        av_free(s->queue);
+        av_freep(&s->queue->buf);
+        av_freep(&s->queue);
         s->queue = next;
     }
     s->seq       = 0;
@@ -689,7 +691,7 @@ static void enqueue_packet(RTPDemuxContext *s, uint8_t *buf, int len)
     packet = av_mallocz(sizeof(*packet));
     if (!packet)
         return;
-    packet->recvtime = av_gettime();
+    packet->recvtime = av_gettime_relative();
     packet->seq      = seq;
     packet->len      = len;
     packet->buf      = buf;
@@ -723,8 +725,8 @@ static int rtp_parse_queued_packet(RTPDemuxContext *s, AVPacket *pkt)
     /* Parse the first packet in the queue, and dequeue it */
     rv   = rtp_parse_packet_internal(s, pkt, s->queue->buf, s->queue->len);
     next = s->queue->next;
-    av_free(s->queue->buf);
-    av_free(s->queue);
+    av_freep(&s->queue->buf);
+    av_freep(&s->queue);
     s->queue = next;
     s->queue_len--;
     return rv;
@@ -767,7 +769,7 @@ static int rtp_parse_one_packet(RTPDemuxContext *s, AVPacket *pkt,
     }
 
     if (s->st) {
-        int64_t received = av_gettime();
+        int64_t received = av_gettime_relative();
         uint32_t arrival_ts = av_rescale_q(received, AV_TIME_BASE_Q,
                                            s->st->time_base);
         timestamp = AV_RB32(buf + 4);
@@ -833,8 +835,10 @@ void ff_rtp_parse_close(RTPDemuxContext *s)
     av_free(s);
 }
 
-int ff_parse_fmtp(AVStream *stream, PayloadContext *data, const char *p,
-                  int (*parse_fmtp)(AVStream *stream,
+int ff_parse_fmtp(AVFormatContext *s,
+                  AVStream *stream, PayloadContext *data, const char *p,
+                  int (*parse_fmtp)(AVFormatContext *s,
+                                    AVStream *stream,
                                     PayloadContext *data,
                                     char *attr, char *value))
 {
@@ -859,7 +863,7 @@ int ff_parse_fmtp(AVStream *stream, PayloadContext *data, const char *p,
     while (ff_rtsp_next_attr_and_value(&p,
                                        attr, sizeof(attr),
                                        value, value_size)) {
-        res = parse_fmtp(stream, data, attr, value);
+        res = parse_fmtp(s, stream, data, attr, value);
         if (res < 0 && res != AVERROR_PATCHWELCOME) {
             av_free(value);
             return res;

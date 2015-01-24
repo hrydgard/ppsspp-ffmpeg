@@ -45,7 +45,7 @@ static void latm_free_context(PayloadContext *data)
         avio_close_dyn_buf(data->dyn_buf, &p);
         av_free(p);
     }
-    av_free(data->buf);
+    av_freep(&data->buf);
     av_free(data);
 }
 
@@ -72,7 +72,7 @@ static int latm_parse_packet(AVFormatContext *ctx, PayloadContext *data,
 
         if (!(flags & RTP_FLAG_MARKER))
             return AVERROR(EAGAIN);
-        av_free(data->buf);
+        av_freep(&data->buf);
         data->len = avio_close_dyn_buf(data->dyn_buf, &data->buf);
         data->dyn_buf = NULL;
         data->pos = 0;
@@ -142,7 +142,8 @@ end:
     return ret;
 }
 
-static int parse_fmtp(AVStream *stream, PayloadContext *data,
+static int parse_fmtp(AVFormatContext *s,
+                      AVStream *stream, PayloadContext *data,
                       char *attr, char *value)
 {
     int res;
@@ -154,7 +155,7 @@ static int parse_fmtp(AVStream *stream, PayloadContext *data,
     } else if (!strcmp(attr, "cpresent")) {
         int cpresent = atoi(value);
         if (cpresent != 0)
-            avpriv_request_sample(NULL,
+            avpriv_request_sample(s,
                                   "RTP MP4A-LATM with in-band configuration");
     }
 
@@ -170,7 +171,7 @@ static int latm_parse_sdp_line(AVFormatContext *s, int st_index,
         return 0;
 
     if (av_strstart(line, "fmtp:", &p))
-        return ff_parse_fmtp(s->streams[st_index], data, p, parse_fmtp);
+        return ff_parse_fmtp(s, s->streams[st_index], data, p, parse_fmtp);
 
     return 0;
 }

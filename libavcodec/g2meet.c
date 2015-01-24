@@ -24,18 +24,20 @@
  * Go2Webinar decoder
  */
 
+#include <inttypes.h>
 #include <zlib.h>
 
 #include "libavutil/intreadwrite.h"
 #include "avcodec.h"
+#include "blockdsp.h"
 #include "bytestream.h"
-#include "dsputil.h"
+#include "idctdsp.h"
 #include "get_bits.h"
 #include "internal.h"
 #include "mjpeg.h"
 
 enum ChunkType {
-    FRAME_INFO = 0xC8,
+    DISPLAY_INFO = 0xC8,
     TILE_DATA,
     CURSOR_POS,
     CURSOR_SHAPE,
@@ -71,7 +73,8 @@ static const uint8_t chroma_quant[64] = {
 };
 
 typedef struct JPGContext {
-    DSPContext dsp;
+    BlockDSPContext bdsp;
+    IDCTDSPContext idsp;
     ScanTable  scantable;
 
     VLC        dc_vlc[2], ac_vlc[2];
@@ -87,6 +90,7 @@ typedef struct G2MContext {
 
     int        compression;
     int        width, height, bpp;
+    int        orig_width, orig_height;
     int        tile_width, tile_height;
     int        tiles_x, tiles_y, tile_x, tile_y;
 
@@ -149,8 +153,9 @@ static av_cold int jpg_init(AVCodecContext *avctx, JPGContext *c)
     if (ret)
         return ret;
 
-    ff_dsputil_init(&c->dsp, avctx);
-    ff_init_scantable(c->dsp.idct_permutation, &c->scantable,
+    ff_blockdsp_init(&c->bdsp, avctx);
+    ff_idctdsp_init(&c->idsp, avctx);
+    ff_init_scantable(c->idsp.idct_permutation, &c->scantable,
                       ff_zigzag_direct);
 
     return 0;
@@ -192,14 +197,14 @@ static int jpg_decode_block(JPGContext *c, GetBitContext *gb,
     const int is_chroma = !!plane;
     const uint8_t *qmat = is_chroma ? chroma_quant : luma_quant;
 
-    c->dsp.clear_block(block);
+    c->bdsp.clear_block(block);
     dc = get_vlc2(gb, c->dc_vlc[is_chroma].table, 9, 3);
     if (dc < 0)
         return AVERROR_INVALIDDATA;
     if (dc)
         dc = get_xbits(gb, dc);
-    dc = dc * qmat[0] + c->prev_dc[plane];
-    block[0] = dc;
+    dc                = dc * qmat[0] + c->prev_dc[plane];
+    block[0]          = dc;
     c->prev_dc[plane] = dc;
 
     pos = 0;
@@ -214,8 +219,8 @@ static int jpg_decode_block(JPGContext *c, GetBitContext *gb,
         if (val) {
             int nbits = val;
 
-            val = get_xbits(gb, nbits);
-            val *= qmat[ff_zigzag_direct[pos]];
+            val                                 = get_xbits(gb, nbits);
+            val                                *= qmat[ff_zigzag_direct[pos]];
             block[c->scantable.permutated[pos]] = val;
         }
     }
@@ -253,29 +258,35 @@ static int jpg_decode_data(JPGContext *c, int width, int height,
     mb_h  = (height + 15) >> 4;
 
     if (!num_mbs)
-        num_mbs = mb_w * mb_h;
+        num_mbs = mb_w * mb_h * 4;
 
     for (i = 0; i < 3; i++)
         c->prev_dc[i] = 1024;
     bx = by = 0;
+    c->bdsp.clear_blocks(c->block[0]);
     for (mb_y = 0; mb_y < mb_h; mb_y++) {
         for (mb_x = 0; mb_x < mb_w; mb_x++) {
-            if (mask && !mask[mb_x]) {
+            if (mask && !mask[mb_x * 2] && !mask[mb_x * 2 + 1] &&
+                !mask[mb_x * 2 +     mask_stride] &&
+                !mask[mb_x * 2 + 1 + mask_stride]) {
                 bx += 16;
                 continue;
             }
             for (j = 0; j < 2; j++) {
                 for (i = 0; i < 2; i++) {
+                    if (mask && !mask[mb_x * 2 + i + j * mask_stride])
+                        continue;
+                    num_mbs--;
                     if ((ret = jpg_decode_block(c, &gb, 0,
                                                 c->block[i + j * 2])) != 0)
                         return ret;
-                    c->dsp.idct(c->block[i + j * 2]);
+                    c->idsp.idct(c->block[i + j * 2]);
                 }
             }
             for (i = 1; i < 3; i++) {
                 if ((ret = jpg_decode_block(c, &gb, i, c->block[i + 3])) != 0)
                     return ret;
-                c->dsp.idct(c->block[i + 3]);
+                c->idsp.idct(c->block[i + 3]);
             }
 
             for (j = 0; j < 16; j++) {
@@ -290,14 +301,14 @@ static int jpg_decode_data(JPGContext *c, int width, int height,
                 }
             }
 
-            if (!--num_mbs)
+            if (!num_mbs)
                 return 0;
             bx += 16;
         }
         bx  = 0;
         by += 16;
         if (mask)
-            mask += mask_stride;
+            mask += mask_stride * 2;
     }
 
     return 0;
@@ -353,7 +364,7 @@ static int kempf_decode_tile(G2MContext *c, int tile_x, int tile_y,
     width  = FFMIN(c->width  - tile_x * c->tile_width,  c->tile_width);
     height = FFMIN(c->height - tile_y * c->tile_height, c->tile_height);
 
-    hdr = *src++;
+    hdr      = *src++;
     sub_type = hdr >> 5;
     if (sub_type == 0) {
         int j;
@@ -375,19 +386,21 @@ static int kempf_decode_tile(G2MContext *c, int tile_x, int tile_y,
     npal = *src++ + 1;
     if (src_end - src < npal * 3)
         return AVERROR_INVALIDDATA;
-    memcpy(pal, src, npal * 3); src += npal * 3;
+    memcpy(pal, src, npal * 3);
+    src += npal * 3;
     if (sub_type != 2) {
         for (i = 0; i < npal; i++) {
             if (!memcmp(pal + i * 3, transp, 3)) {
-               tidx = i;
-               break;
+                tidx = i;
+                break;
             }
         }
     }
 
     if (src_end - src < 2)
         return 0;
-    zsize = (src[0] << 8) | src[1]; src += 2;
+    zsize = (src[0] << 8) | src[1];
+    src  += 2;
 
     if (src_end - src < zsize + (sub_type != 2))
         return AVERROR_INVALIDDATA;
@@ -405,7 +418,7 @@ static int kempf_decode_tile(G2MContext *c, int tile_x, int tile_y,
 
     nblocks = *src++ + 1;
     cblocks = 0;
-    bstride = FFALIGN(width, 16) >> 4;
+    bstride = FFALIGN(width, 16) >> 3;
     // blocks are coded LSB and we need normal bitreader for JPEG data
     bits = 0;
     for (i = 0; i < (FFALIGN(height, 16) >> 4); i++) {
@@ -422,14 +435,17 @@ static int kempf_decode_tile(G2MContext *c, int tile_x, int tile_y,
             cblocks += coded;
             if (cblocks > nblocks)
                 return AVERROR_INVALIDDATA;
-            c->kempf_flags[j + i * bstride] = coded;
+            c->kempf_flags[j * 2 +      i * 2      * bstride] =
+            c->kempf_flags[j * 2 + 1 +  i * 2      * bstride] =
+            c->kempf_flags[j * 2 +     (i * 2 + 1) * bstride] =
+            c->kempf_flags[j * 2 + 1 + (i * 2 + 1) * bstride] = coded;
         }
     }
 
     memset(c->jpeg_tile, 0, c->tile_stride * height);
     jpg_decode_data(&c->jc, width, height, src, src_end - src,
                     c->jpeg_tile, c->tile_stride,
-                    c->kempf_flags, bstride, nblocks, 0);
+                    c->kempf_flags, bstride, nblocks * 4, 0);
 
     kempf_restore_buf(c->kempf_buf, dlen, dst, c->framebuf_stride,
                       c->jpeg_tile, c->tile_stride,
@@ -446,7 +462,7 @@ static int g2m_init_buffers(G2MContext *c)
         c->framebuf_stride = FFALIGN(c->width + 15, 16) * 3;
         aligned_height     = c->height + 15;
         av_free(c->framebuf);
-        c->framebuf = av_mallocz(c->framebuf_stride * aligned_height);
+        c->framebuf = av_mallocz_array(c->framebuf_stride, aligned_height);
         if (!c->framebuf)
             return AVERROR(ENOMEM);
     }
@@ -482,30 +498,30 @@ static int g2m_load_cursor(AVCodecContext *avctx, G2MContext *c,
     uint32_t cursor_hot_x, cursor_hot_y;
     int cursor_fmt, err;
 
-    cur_size      = bytestream2_get_be32(gb);
-    cursor_w      = bytestream2_get_byte(gb);
-    cursor_h      = bytestream2_get_byte(gb);
-    cursor_hot_x  = bytestream2_get_byte(gb);
-    cursor_hot_y  = bytestream2_get_byte(gb);
-    cursor_fmt    = bytestream2_get_byte(gb);
+    cur_size     = bytestream2_get_be32(gb);
+    cursor_w     = bytestream2_get_byte(gb);
+    cursor_h     = bytestream2_get_byte(gb);
+    cursor_hot_x = bytestream2_get_byte(gb);
+    cursor_hot_y = bytestream2_get_byte(gb);
+    cursor_fmt   = bytestream2_get_byte(gb);
 
     cursor_stride = FFALIGN(cursor_w, cursor_fmt==1 ? 32 : 1) * 4;
 
     if (cursor_w < 1 || cursor_w > 256 ||
         cursor_h < 1 || cursor_h > 256) {
-        av_log(avctx, AV_LOG_ERROR, "Invalid cursor dimensions %dx%d\n",
+        av_log(avctx, AV_LOG_ERROR, "Invalid cursor dimensions %"PRIu32"x%"PRIu32"\n",
                cursor_w, cursor_h);
         return AVERROR_INVALIDDATA;
     }
     if (cursor_hot_x > cursor_w || cursor_hot_y > cursor_h) {
-        av_log(avctx, AV_LOG_WARNING, "Invalid hotspot position %d,%d\n",
+        av_log(avctx, AV_LOG_WARNING, "Invalid hotspot position %"PRIu32",%"PRIu32"\n",
                cursor_hot_x, cursor_hot_y);
         cursor_hot_x = FFMIN(cursor_hot_x, cursor_w - 1);
         cursor_hot_y = FFMIN(cursor_hot_y, cursor_h - 1);
     }
     if (cur_size - 9 > bytestream2_get_bytes_left(gb) ||
         c->cursor_w * c->cursor_h / 4 > cur_size) {
-        av_log(avctx, AV_LOG_ERROR, "Invalid cursor data size %d/%d\n",
+        av_log(avctx, AV_LOG_ERROR, "Invalid cursor data size %"PRIu32"/%u\n",
                cur_size, bytestream2_get_bytes_left(gb));
         return AVERROR_INVALIDDATA;
     }
@@ -535,7 +551,7 @@ static int g2m_load_cursor(AVCodecContext *avctx, G2MContext *c,
                 bits = bytestream2_get_be32(gb);
                 for (k = 0; k < 32; k++) {
                     dst[0] = !!(bits & 0x80000000);
-                    dst += 4;
+                    dst   += 4;
                     bits <<= 1;
                 }
             }
@@ -549,18 +565,24 @@ static int g2m_load_cursor(AVCodecContext *avctx, G2MContext *c,
                     int mask_bit = !!(bits & 0x80000000);
                     switch (dst[0] * 2 + mask_bit) {
                     case 0:
-                        dst[0] = 0xFF; dst[1] = 0x00;
-                        dst[2] = 0x00; dst[3] = 0x00;
+                        dst[0] = 0xFF;
+                        dst[1] = 0x00;
+                        dst[2] = 0x00;
+                        dst[3] = 0x00;
                         break;
                     case 1:
-                        dst[0] = 0xFF; dst[1] = 0xFF;
-                        dst[2] = 0xFF; dst[3] = 0xFF;
+                        dst[0] = 0xFF;
+                        dst[1] = 0xFF;
+                        dst[2] = 0xFF;
+                        dst[3] = 0xFF;
                         break;
                     default:
-                        dst[0] = 0x00; dst[1] = 0x00;
-                        dst[2] = 0x00; dst[3] = 0x00;
+                        dst[0] = 0x00;
+                        dst[1] = 0x00;
+                        dst[2] = 0x00;
+                        dst[3] = 0x00;
                     }
-                    dst += 4;
+                    dst   += 4;
                     bits <<= 1;
                 }
             }
@@ -645,8 +667,8 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
     GetByteContext bc, tbc;
     int magic;
     int got_header = 0;
-    uint32_t chunk_size;
-    int chunk_type;
+    uint32_t chunk_size, r_mask, g_mask, b_mask;
+    int chunk_type, chunk_start;
     int i;
     int ret;
 
@@ -661,36 +683,38 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
 
     magic = bytestream2_get_be32(&bc);
     if ((magic & ~0xF) != MKBETAG('G', '2', 'M', '0') ||
-        (magic & 0xF) < 2 || (magic & 0xF) > 4) {
+        (magic & 0xF) < 2 || (magic & 0xF) > 5) {
         av_log(avctx, AV_LOG_ERROR, "Wrong magic %08X\n", magic);
         return AVERROR_INVALIDDATA;
     }
 
-    if ((magic & 0xF) != 4) {
+    if ((magic & 0xF) < 4) {
         av_log(avctx, AV_LOG_ERROR, "G2M2 and G2M3 are not yet supported\n");
         return AVERROR(ENOSYS);
     }
 
     while (bytestream2_get_bytes_left(&bc) > 5) {
-        chunk_size = bytestream2_get_le32(&bc) - 1;
-        chunk_type = bytestream2_get_byte(&bc);
+        chunk_size  = bytestream2_get_le32(&bc) - 1;
+        chunk_type  = bytestream2_get_byte(&bc);
+        chunk_start = bytestream2_tell(&bc);
         if (chunk_size > bytestream2_get_bytes_left(&bc)) {
-            av_log(avctx, AV_LOG_ERROR, "Invalid chunk size %d type %02X\n",
+            av_log(avctx, AV_LOG_ERROR, "Invalid chunk size %"PRIu32" type %02X\n",
                    chunk_size, chunk_type);
             break;
         }
         switch (chunk_type) {
-        case FRAME_INFO:
+        case DISPLAY_INFO:
+            got_header =
             c->got_header = 0;
             if (chunk_size < 21) {
-                av_log(avctx, AV_LOG_ERROR, "Invalid frame info size %d\n",
+                av_log(avctx, AV_LOG_ERROR, "Invalid display info size %"PRIu32"\n",
                        chunk_size);
                 break;
             }
             c->width  = bytestream2_get_be32(&bc);
             c->height = bytestream2_get_be32(&bc);
-            if (c->width  < 16 || c->width  > avctx->width ||
-                c->height < 16 || c->height > avctx->height) {
+            if (c->width  < 16 || c->width  > c->orig_width ||
+                c->height < 16 || c->height > c->orig_height) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Invalid frame dimensions %dx%d\n",
                        c->width, c->height);
@@ -707,12 +731,15 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
                 av_log(avctx, AV_LOG_ERROR,
                        "Unknown compression method %d\n",
                        c->compression);
-                return AVERROR_PATCHWELCOME;
+                ret = AVERROR_PATCHWELCOME;
+                goto header_fail;
             }
             c->tile_width  = bytestream2_get_be32(&bc);
             c->tile_height = bytestream2_get_be32(&bc);
-            if (!c->tile_width || !c->tile_height ||
-                ((c->tile_width | c->tile_height) & 0xF)) {
+            if (c->tile_width <= 0 || c->tile_height <= 0 ||
+                ((c->tile_width | c->tile_height) & 0xF) ||
+                c->tile_width * 4LL * c->tile_height >= INT_MAX
+            ) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Invalid tile dimensions %dx%d\n",
                        c->tile_width, c->tile_height);
@@ -721,9 +748,30 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             }
             c->tiles_x = (c->width  + c->tile_width  - 1) / c->tile_width;
             c->tiles_y = (c->height + c->tile_height - 1) / c->tile_height;
-            c->bpp = bytestream2_get_byte(&bc);
-            chunk_size -= 21;
-            bytestream2_skip(&bc, chunk_size);
+            c->bpp     = bytestream2_get_byte(&bc);
+            if (c->bpp == 32) {
+                if (bytestream2_get_bytes_left(&bc) < 16 ||
+                    (chunk_size - 21) < 16) {
+                    av_log(avctx, AV_LOG_ERROR,
+                           "Display info: missing bitmasks!\n");
+                    ret = AVERROR_INVALIDDATA;
+                    goto header_fail;
+                }
+                r_mask = bytestream2_get_be32(&bc);
+                g_mask = bytestream2_get_be32(&bc);
+                b_mask = bytestream2_get_be32(&bc);
+                if (r_mask != 0xFF0000 || g_mask != 0xFF00 || b_mask != 0xFF) {
+                    av_log(avctx, AV_LOG_ERROR,
+                           "Invalid or unsupported bitmasks: R=%"PRIX32", G=%"PRIX32", B=%"PRIX32"\n",
+                           r_mask, g_mask, b_mask);
+                    ret = AVERROR_PATCHWELCOME;
+                    goto header_fail;
+                }
+            } else {
+                avpriv_request_sample(avctx, "bpp=%d", c->bpp);
+                ret = AVERROR_PATCHWELCOME;
+                goto header_fail;
+            }
             if (g2m_init_buffers(c)) {
                 ret = AVERROR(ENOMEM);
                 goto header_fail;
@@ -733,12 +781,11 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
         case TILE_DATA:
             if (!c->tiles_x || !c->tiles_y) {
                 av_log(avctx, AV_LOG_WARNING,
-                       "No frame header - skipping tile\n");
-                bytestream2_skip(&bc, bytestream2_get_bytes_left(&bc));
+                       "No display info - skipping tile\n");
                 break;
             }
             if (chunk_size < 2) {
-                av_log(avctx, AV_LOG_ERROR, "Invalid tile data size %d\n",
+                av_log(avctx, AV_LOG_ERROR, "Invalid tile data size %"PRIu32"\n",
                        chunk_size);
                 break;
             }
@@ -750,7 +797,6 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
                        c->tile_x, c->tile_y, c->tiles_x, c->tiles_y);
                 break;
             }
-            chunk_size -= 2;
             ret = 0;
             switch (c->compression) {
             case COMPR_EPIC_J_B:
@@ -760,44 +806,42 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             case COMPR_KEMPF_J_B:
                 ret = kempf_decode_tile(c, c->tile_x, c->tile_y,
                                         buf + bytestream2_tell(&bc),
-                                        chunk_size);
+                                        chunk_size - 2);
                 break;
             }
             if (ret && c->framebuf)
                 av_log(avctx, AV_LOG_ERROR, "Error decoding tile %d,%d\n",
                        c->tile_x, c->tile_y);
-            bytestream2_skip(&bc, chunk_size);
             break;
         case CURSOR_POS:
             if (chunk_size < 5) {
-                av_log(avctx, AV_LOG_ERROR, "Invalid cursor pos size %d\n",
+                av_log(avctx, AV_LOG_ERROR, "Invalid cursor pos size %"PRIu32"\n",
                        chunk_size);
                 break;
             }
             c->cursor_x = bytestream2_get_be16(&bc);
             c->cursor_y = bytestream2_get_be16(&bc);
-            bytestream2_skip(&bc, chunk_size - 4);
             break;
         case CURSOR_SHAPE:
             if (chunk_size < 8) {
-                av_log(avctx, AV_LOG_ERROR, "Invalid cursor data size %d\n",
+                av_log(avctx, AV_LOG_ERROR, "Invalid cursor data size %"PRIu32"\n",
                        chunk_size);
                 break;
             }
             bytestream2_init(&tbc, buf + bytestream2_tell(&bc),
                              chunk_size - 4);
             g2m_load_cursor(avctx, c, &tbc);
-            bytestream2_skip(&bc, chunk_size);
             break;
         case CHUNK_CC:
         case CHUNK_CD:
-            bytestream2_skip(&bc, chunk_size);
             break;
         default:
-            av_log(avctx, AV_LOG_WARNING, "Skipping chunk type %02X\n",
+            av_log(avctx, AV_LOG_WARNING, "Skipping chunk type %02d\n",
                    chunk_type);
-            bytestream2_skip(&bc, chunk_size);
         }
+
+        /* navigate to next chunk */
+        bytestream2_skip(&bc, chunk_start + chunk_size - bytestream2_tell(&bc));
     }
     if (got_header)
         c->got_header = 1;
@@ -811,7 +855,7 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
 
         for (i = 0; i < avctx->height; i++)
             memcpy(pic->data[0] + i * pic->linesize[0],
-                   c->framebuf  + i * c->framebuf_stride,
+                   c->framebuf + i * c->framebuf_stride,
                    c->width * 3);
         g2m_paint_cursor(c, pic->data[0], pic->linesize[0]);
 
@@ -819,15 +863,18 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
     }
 
     return buf_size;
+
 header_fail:
-    c->width   = c->height  = 0;
-    c->tiles_x = c->tiles_y = 0;
+    c->width   =
+    c->height  = 0;
+    c->tiles_x =
+    c->tiles_y = 0;
     return ret;
 }
 
 static av_cold int g2m_decode_init(AVCodecContext *avctx)
 {
-    G2MContext * const c = avctx->priv_data;
+    G2MContext *const c = avctx->priv_data;
     int ret;
 
     if ((ret = jpg_init(avctx, &c->jc)) != 0) {
@@ -838,12 +885,16 @@ static av_cold int g2m_decode_init(AVCodecContext *avctx)
 
     avctx->pix_fmt = AV_PIX_FMT_RGB24;
 
+    // store original sizes and check against those if resize happens
+    c->orig_width  = avctx->width;
+    c->orig_height = avctx->height;
+
     return 0;
 }
 
 static av_cold int g2m_decode_end(AVCodecContext *avctx)
 {
-    G2MContext * const c = avctx->priv_data;
+    G2MContext *const c = avctx->priv_data;
 
     jpg_free_context(&c->jc);
 

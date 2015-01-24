@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <stdint.h>
+#include <inttypes.h>
 #include <stdlib.h>
 
 #include "libavutil/avstring.h"
@@ -60,7 +60,7 @@ static int read_line(AVIOContext * pb, char* line, int bufsize)
             break;
         if (b == '\n') {
             line[i] = '\0';
-            return url_feof(pb) ? -1 : 0;
+            return avio_feof(pb) ? -1 : 0;
         }
         line[i] = b;
     }
@@ -222,7 +222,8 @@ static int rpl_read_header(AVFormatContext *s)
                 break;
         }
         if (ast->codec->codec_id == AV_CODEC_ID_NONE)
-            avpriv_request_sample(s, "Audio format %i", audio_format);
+            avpriv_request_sample(s, "Audio format %"PRId32,
+                                  audio_format);
         avpriv_set_pts_info(ast, 32, 1, ast->codec->bit_rate);
     } else {
         for (i = 0; i < 3; i++)

@@ -14,7 +14,7 @@ You can disable all the decoders with the configure option
 with the options @code{--enable-decoder=@var{DECODER}} /
 @code{--disable-decoder=@var{DECODER}}.
 
-The option @code{-codecs} of the ff* tools will display the list of
+The option @code{-decoders} of the ff* tools will display the list of
 enabled decoders.
 
 @c man end DECODERS
@@ -51,6 +51,37 @@ top-field-first is assumed
 
 @chapter Audio Decoders
 @c man begin AUDIO DECODERS
+
+A description of some of the currently available audio decoders
+follows.
+
+@section ac3
+
+AC-3 audio decoder.
+
+This decoder implements part of ATSC A/52:2010 and ETSI TS 102 366, as well as
+the undocumented RealAudio 3 (a.k.a. dnet).
+
+@subsection AC-3 Decoder Options
+
+@table @option
+
+@item -drc_scale @var{value}
+Dynamic Range Scale Factor. The factor to apply to dynamic range values
+from the AC-3 stream. This factor is applied exponentially.
+There are 3 notable scale factor ranges:
+@table @option
+@item drc_scale == 0
+DRC disabled. Produces full range audio.
+@item 0 < drc_scale <= 1
+DRC enabled.  Applies a fraction of the stream DRC value.
+Audio reproduction is between full range and full compression.
+@item drc_scale > 1
+DRC enabled. Applies drc_scale asymmetrically.
+Loud sounds are fully compressed.  Soft sounds are enhanced.
+@end table
+
+@end table
 
 @section ffwavesynth
 
@@ -132,6 +163,9 @@ Requires the presence of the libopus headers and library during
 configuration. You need to explicitly configure the build with
 @code{--enable-libopus}.
 
+An FFmpeg native decoder for Opus exists, so users can decode Opus
+without this library.
+
 @c man end AUDIO DECODERS
 
 @chapter Subtitles Decoders
@@ -156,6 +190,15 @@ The format for this option is a string containing 16 24-bits hexadecimal
 numbers (without 0x prefix) separated by comas, for example @code{0d00ee,
 ee450d, 101010, eaeaea, 0ce60b, ec14ed, ebff0b, 0d617a, 7b7b7b, d1d1d1,
 7b2a0e, 0d950c, 0f007b, cf0dec, cfa80c, 7c127b}.
+
+@item ifo_palette
+Specify the IFO file from which the global palette is obtained.
+(experimental)
+
+@item forced_subs_only
+Only decode subtitle entries marked as forced. Some titles have forced
+and non-forced subtitles in the same track. Setting this flag to @code{1}
+will only keep the forced subtitles. Default value is @code{0}.
 @end table
 
 @section libzvbi-teletext

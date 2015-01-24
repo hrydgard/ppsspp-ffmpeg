@@ -47,7 +47,7 @@
 
 typedef struct ATRAC3PContext {
     GetBitContext gb;
-    AVFloatDSPContext fdsp;
+    AVFloatDSPContext *fdsp;
 
     DECLARE_ALIGNED(32, float, samples)[2][ATRAC3P_FRAME_SAMPLES];  ///< quantized MDCT spectrum
     DECLARE_ALIGNED(32, float, mdct_buf)[2][ATRAC3P_FRAME_SAMPLES]; ///< output of the IMDCT
@@ -67,7 +67,10 @@ typedef struct ATRAC3PContext {
 
 static av_cold int atrac3p_decode_close(AVCodecContext *avctx)
 {
-    av_free(((ATRAC3PContext *)(avctx->priv_data))->ch_units);
+    ATRAC3PContext *ctx = avctx->priv_data;
+
+    av_freep(&ctx->ch_units);
+    av_freep(&ctx->fdsp);
 
     return 0;
 }
@@ -77,35 +80,42 @@ static av_cold int set_channel_params(ATRAC3PContext *ctx,
 {
     memset(ctx->channel_blocks, 0, sizeof(ctx->channel_blocks));
 
-    switch (avctx->channel_layout) {
-    case AV_CH_FRONT_LEFT:
-    case AV_CH_LAYOUT_MONO:
+    switch (avctx->channels) {
+    case 1:
+        if (avctx->channel_layout != AV_CH_FRONT_LEFT)
+            avctx->channel_layout = AV_CH_LAYOUT_MONO;
+
         ctx->num_channel_blocks = 1;
         ctx->channel_blocks[0]  = CH_UNIT_MONO;
         break;
-    case AV_CH_LAYOUT_STEREO:
+    case 2:
+        avctx->channel_layout   = AV_CH_LAYOUT_STEREO;
         ctx->num_channel_blocks = 1;
         ctx->channel_blocks[0]  = CH_UNIT_STEREO;
         break;
-    case AV_CH_LAYOUT_SURROUND:
+    case 3:
+        avctx->channel_layout   = AV_CH_LAYOUT_SURROUND;
         ctx->num_channel_blocks = 2;
         ctx->channel_blocks[0]  = CH_UNIT_STEREO;
         ctx->channel_blocks[1]  = CH_UNIT_MONO;
         break;
-    case AV_CH_LAYOUT_4POINT0:
+    case 4:
+        avctx->channel_layout   = AV_CH_LAYOUT_4POINT0;
         ctx->num_channel_blocks = 3;
         ctx->channel_blocks[0]  = CH_UNIT_STEREO;
         ctx->channel_blocks[1]  = CH_UNIT_MONO;
         ctx->channel_blocks[2]  = CH_UNIT_MONO;
         break;
-    case AV_CH_LAYOUT_5POINT1_BACK:
+    case 6:
+        avctx->channel_layout   = AV_CH_LAYOUT_5POINT1_BACK;
         ctx->num_channel_blocks = 4;
         ctx->channel_blocks[0]  = CH_UNIT_STEREO;
         ctx->channel_blocks[1]  = CH_UNIT_MONO;
         ctx->channel_blocks[2]  = CH_UNIT_STEREO;
         ctx->channel_blocks[3]  = CH_UNIT_MONO;
         break;
-    case AV_CH_LAYOUT_6POINT1_BACK:
+    case 7:
+        avctx->channel_layout   = AV_CH_LAYOUT_6POINT1_BACK;
         ctx->num_channel_blocks = 5;
         ctx->channel_blocks[0]  = CH_UNIT_STEREO;
         ctx->channel_blocks[1]  = CH_UNIT_MONO;
@@ -113,7 +123,8 @@ static av_cold int set_channel_params(ATRAC3PContext *ctx,
         ctx->channel_blocks[3]  = CH_UNIT_MONO;
         ctx->channel_blocks[4]  = CH_UNIT_MONO;
         break;
-    case AV_CH_LAYOUT_7POINT1:
+    case 8:
+        avctx->channel_layout   = AV_CH_LAYOUT_7POINT1;
         ctx->num_channel_blocks = 5;
         ctx->channel_blocks[0]  = CH_UNIT_STEREO;
         ctx->channel_blocks[1]  = CH_UNIT_MONO;
@@ -123,7 +134,7 @@ static av_cold int set_channel_params(ATRAC3PContext *ctx,
         break;
     default:
         av_log(avctx, AV_LOG_ERROR,
-               "Unsupported channel layout: %"PRIx64"!\n", avctx->channel_layout);
+               "Unsupported channel count: %d!\n", avctx->channels);
         return AVERROR_INVALIDDATA;
     }
 
@@ -135,9 +146,12 @@ static av_cold int atrac3p_decode_init(AVCodecContext *avctx)
     ATRAC3PContext *ctx = avctx->priv_data;
     int i, ch, ret;
 
-    ff_atrac3p_init_vlcs();
+    if (!avctx->block_align) {
+        av_log(avctx, AV_LOG_ERROR, "block_align is not set\n");
+        return AVERROR(EINVAL);
+    }
 
-    avpriv_float_dsp_init(&ctx->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
+    ff_atrac3p_init_vlcs();
 
     /* initialize IPQF */
     ff_mdct_init(&ctx->ipqf_dct_ctx, 5, 1, 32.0 / 32768.0);
@@ -153,9 +167,10 @@ static av_cold int atrac3p_decode_init(AVCodecContext *avctx)
 
     ctx->my_channel_layout = avctx->channel_layout;
 
-    ctx->ch_units = av_mallocz(sizeof(*ctx->ch_units) *
-                               ctx->num_channel_blocks);
-    if (!ctx->ch_units) {
+    ctx->ch_units = av_mallocz_array(ctx->num_channel_blocks, sizeof(*ctx->ch_units));
+    ctx->fdsp = avpriv_float_dsp_alloc(avctx->flags & CODEC_FLAG_BITEXACT);
+
+    if (!ctx->ch_units || !ctx->fdsp) {
         atrac3p_decode_close(avctx);
         return AVERROR(ENOMEM);
     }
@@ -252,7 +267,7 @@ static void reconstruct_frame(ATRAC3PContext *ctx, Atrac3pChanUnitCtx *ch_unit,
     for (ch = 0; ch < num_channels; ch++) {
         for (sb = 0; sb < ch_unit->num_subbands; sb++) {
             /* inverse transform and windowing */
-            ff_atrac3p_imdct(&ctx->fdsp, &ctx->mdct_ctx,
+            ff_atrac3p_imdct(ctx->fdsp, &ctx->mdct_ctx,
                              &ctx->samples[ch][sb * ATRAC3P_SUBBAND_SAMPLES],
                              &ctx->mdct_buf[ch][sb * ATRAC3P_SUBBAND_SAMPLES],
                              (ch_unit->channels[ch].wnd_shape_prev[sb] << 1) +
@@ -286,7 +301,7 @@ static void reconstruct_frame(ATRAC3PContext *ctx, Atrac3pChanUnitCtx *ch_unit,
             for (sb = 0; sb < ch_unit->num_subbands; sb++)
                 if (ch_unit->channels[ch].tones_info[sb].num_wavs ||
                     ch_unit->channels[ch].tones_info_prev[sb].num_wavs) {
-                    ff_atrac3p_generate_tones(ch_unit, &ctx->fdsp, ch, sb,
+                    ff_atrac3p_generate_tones(ch_unit, ctx->fdsp, ch, sb,
                                               &ctx->time_buf[ch][sb * 128]);
                 }
         }

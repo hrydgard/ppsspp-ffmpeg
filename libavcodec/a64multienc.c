@@ -187,15 +187,15 @@ static av_cold int a64multi_close_encoder(AVCodecContext *avctx)
 {
     A64Context *c = avctx->priv_data;
     av_frame_free(&avctx->coded_frame);
-    av_free(c->mc_meta_charset);
-    av_free(c->mc_best_cb);
-    av_free(c->mc_charset);
-    av_free(c->mc_charmap);
-    av_free(c->mc_colram);
+    av_freep(&c->mc_meta_charset);
+    av_freep(&c->mc_best_cb);
+    av_freep(&c->mc_charset);
+    av_freep(&c->mc_charmap);
+    av_freep(&c->mc_colram);
     return 0;
 }
 
-static av_cold int a64multi_init_encoder(AVCodecContext *avctx)
+static av_cold int a64multi_encode_init(AVCodecContext *avctx)
 {
     A64Context *c = avctx->priv_data;
     int a;
@@ -220,9 +220,9 @@ static av_cold int a64multi_init_encoder(AVCodecContext *avctx)
                            a64_palette[mc_colors[a]][2] * 0.11;
     }
 
-    if (!(c->mc_meta_charset = av_malloc(32000 * c->mc_lifetime * sizeof(int))) ||
+    if (!(c->mc_meta_charset = av_malloc_array(c->mc_lifetime, 32000 * sizeof(int))) ||
        !(c->mc_best_cb       = av_malloc(CHARSET_CHARS * 32 * sizeof(int)))     ||
-       !(c->mc_charmap       = av_mallocz(1000 * c->mc_lifetime * sizeof(int))) ||
+       !(c->mc_charmap       = av_mallocz_array(c->mc_lifetime, 1000 * sizeof(int))) ||
        !(c->mc_colram        = av_mallocz(CHARSET_CHARS * sizeof(uint8_t)))     ||
        !(c->mc_charset       = av_malloc(0x800 * (INTERLACED+1) * sizeof(uint8_t)))) {
         av_log(avctx, AV_LOG_ERROR, "Failed to allocate buffer memory.\n");
@@ -340,8 +340,14 @@ static int a64multi_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
             buf = pkt->data;
 
             /* calc optimal new charset + charmaps */
-            avpriv_init_elbg(meta, 32, 1000 * c->mc_lifetime, best_cb, CHARSET_CHARS, 50, charmap, &c->randctx);
-            avpriv_do_elbg  (meta, 32, 1000 * c->mc_lifetime, best_cb, CHARSET_CHARS, 50, charmap, &c->randctx);
+            ret = avpriv_init_elbg(meta, 32, 1000 * c->mc_lifetime, best_cb,
+                               CHARSET_CHARS, 50, charmap, &c->randctx);
+            if (ret < 0)
+                return ret;
+            ret = avpriv_do_elbg(meta, 32, 1000 * c->mc_lifetime, best_cb,
+                             CHARSET_CHARS, 50, charmap, &c->randctx);
+            if (ret < 0)
+                return ret;
 
             /* create colorram map and a c64 readable charset */
             render_charset(avctx, charset, colram);
@@ -351,7 +357,6 @@ static int a64multi_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
             /* advance pointers */
             buf      += charset_size;
-            charset  += charset_size;
         }
 
         /* write x frames to buf */
@@ -402,7 +407,7 @@ AVCodec ff_a64multi_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_A64_MULTI,
     .priv_data_size = sizeof(A64Context),
-    .init           = a64multi_init_encoder,
+    .init           = a64multi_encode_init,
     .encode2        = a64multi_encode_frame,
     .close          = a64multi_close_encoder,
     .pix_fmts       = (const enum AVPixelFormat[]) {AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE},
@@ -416,7 +421,7 @@ AVCodec ff_a64multi5_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_A64_MULTI5,
     .priv_data_size = sizeof(A64Context),
-    .init           = a64multi_init_encoder,
+    .init           = a64multi_encode_init,
     .encode2        = a64multi_encode_frame,
     .close          = a64multi_close_encoder,
     .pix_fmts       = (const enum AVPixelFormat[]) {AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE},

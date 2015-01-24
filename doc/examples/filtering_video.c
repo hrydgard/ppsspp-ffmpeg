@@ -24,7 +24,7 @@
 /**
  * @file
  * API example for decoding and filtering
- * @example doc/examples/filtering_video.c
+ * @example filtering_video.c
  */
 
 #define _XOPEN_SOURCE 600 /* for usleep */
@@ -90,6 +90,7 @@ static int init_filters(const char *filters_descr)
     AVFilter *buffersink = avfilter_get_by_name("buffersink");
     AVFilterInOut *outputs = avfilter_inout_alloc();
     AVFilterInOut *inputs  = avfilter_inout_alloc();
+    AVRational time_base = fmt_ctx->streams[video_stream_index]->time_base;
     enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE };
 
     filter_graph = avfilter_graph_alloc();
@@ -102,7 +103,7 @@ static int init_filters(const char *filters_descr)
     snprintf(args, sizeof(args),
             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
             dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt,
-            dec_ctx->time_base.num, dec_ctx->time_base.den,
+            time_base.num, time_base.den,
             dec_ctx->sample_aspect_ratio.num, dec_ctx->sample_aspect_ratio.den);
 
     ret = avfilter_graph_create_filter(&buffersrc_ctx, buffersrc, "in",
@@ -200,7 +201,6 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    avcodec_register_all();
     av_register_all();
     avfilter_register_all();
 
@@ -215,7 +215,6 @@ int main(int argc, char **argv)
             break;
 
         if (packet.stream_index == video_stream_index) {
-            avcodec_get_frame_defaults(frame);
             got_frame = 0;
             ret = avcodec_decode_video2(dec_ctx, frame, &got_frame, &packet);
             if (ret < 0) {

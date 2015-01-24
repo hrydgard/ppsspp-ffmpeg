@@ -22,6 +22,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <inttypes.h>
+
 #include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 
@@ -29,6 +31,7 @@
 #include "internal.h"
 #include "get_bits.h"
 #include "put_bits.h"
+#include "lossless_audiodsp.h"
 #include "wma.h"
 #include "wma_common.h"
 
@@ -44,6 +47,7 @@
 #define WMALL_BLOCK_MAX_SIZE (1 << WMALL_BLOCK_MAX_BITS)    ///< maximum block size
 #define WMALL_BLOCK_SIZES    (WMALL_BLOCK_MAX_BITS - WMALL_BLOCK_MIN_BITS + 1) ///< possible block sizes
 
+#define WMALL_COEFF_PAD_SIZE   16                       ///< pad coef buffers with 0 for use with SIMD
 
 /**
  * @brief frame-specific decoder context for a single channel
@@ -67,6 +71,7 @@ typedef struct WmallDecodeCtx {
     /* generic decoder variables */
     AVCodecContext  *avctx;
     AVFrame         *frame;
+    LLAudDSPContext dsp;                           ///< accelerated DSP functions
     uint8_t         frame_data[MAX_FRAMESIZE + FF_INPUT_BUFFER_PADDING_SIZE];  ///< compressed frame data
     PutBitContext   pb;                             ///< context for filling the frame_data buffer
 
@@ -127,8 +132,8 @@ typedef struct WmallDecodeCtx {
 
     int8_t  mclms_order;
     int8_t  mclms_scaling;
-    int16_t mclms_coeffs[128];
-    int16_t mclms_coeffs_cur[4];
+    int16_t mclms_coeffs[WMALL_MAX_CHANNELS * WMALL_MAX_CHANNELS * 32];
+    int16_t mclms_coeffs_cur[WMALL_MAX_CHANNELS * WMALL_MAX_CHANNELS];
     int16_t mclms_prevvalues[WMALL_MAX_CHANNELS * 2 * 32];
     int16_t mclms_updates[WMALL_MAX_CHANNELS * 2 * 32];
     int     mclms_recent;
@@ -141,9 +146,9 @@ typedef struct WmallDecodeCtx {
         int scaling;
         int coefsend;
         int bitsend;
-        int16_t coefs[MAX_ORDER];
-        int16_t lms_prevvalues[MAX_ORDER * 2];
-        int16_t lms_updates[MAX_ORDER * 2];
+        DECLARE_ALIGNED(16, int16_t, coefs)[MAX_ORDER + WMALL_COEFF_PAD_SIZE/sizeof(int16_t)];
+        DECLARE_ALIGNED(16, int16_t, lms_prevvalues)[MAX_ORDER * 2];
+        DECLARE_ALIGNED(16, int16_t, lms_updates)[MAX_ORDER * 2];
         int recent;
     } cdlms[WMALL_MAX_CHANNELS][9];
 
@@ -184,6 +189,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     }
 
     s->avctx = avctx;
+    ff_llauddsp_init(&s->dsp);
     init_put_bits(&s->pb, s->frame_data, MAX_FRAMESIZE);
 
     if (avctx->extradata_size >= 18) {
@@ -194,10 +200,9 @@ static av_cold int decode_init(AVCodecContext *avctx)
             avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         else if (s->bits_per_sample == 24) {
             avctx->sample_fmt = AV_SAMPLE_FMT_S32P;
-            avpriv_report_missing_feature(avctx, "Bit-depth higher than 16");
-            return AVERROR_PATCHWELCOME;
+            avctx->bits_per_raw_sample = 24;
         } else {
-            av_log(avctx, AV_LOG_ERROR, "Unknown bit-depth: %d\n",
+            av_log(avctx, AV_LOG_ERROR, "Unknown bit-depth: %"PRIu8"\n",
                    s->bits_per_sample);
             return AVERROR_INVALIDDATA;
         }
@@ -239,7 +244,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     s->bV3RTM                    = s->decode_flags & 0x100;
 
     if (s->max_num_subframes > MAX_SUBFRAMES) {
-        av_log(avctx, AV_LOG_ERROR, "invalid number of subframes %i\n",
+        av_log(avctx, AV_LOG_ERROR, "invalid number of subframes %"PRIu8"\n",
                s->max_num_subframes);
         return AVERROR_INVALIDDATA;
     }
@@ -257,7 +262,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     }
 
     if (s->num_channels < 0) {
-        av_log(avctx, AV_LOG_ERROR, "invalid number of channels %d\n",
+        av_log(avctx, AV_LOG_ERROR, "invalid number of channels %"PRId8"\n",
                s->num_channels);
         return AVERROR_INVALIDDATA;
     } else if (s->num_channels > WMALL_MAX_CHANNELS) {
@@ -382,7 +387,7 @@ static int decode_tilehdr(WmallDecodeCtx *s)
                 ++chan->num_subframes;
                 if (num_samples[c] > s->samples_per_frame) {
                     av_log(s->avctx, AV_LOG_ERROR, "broken frame: "
-                           "channel len(%d) > samples_per_frame(%d)\n",
+                           "channel len(%"PRIu16") > samples_per_frame(%"PRIu16")\n",
                            num_samples[c], s->samples_per_frame);
                     return AVERROR_INVALIDDATA;
                 }
@@ -457,6 +462,13 @@ static int decode_cdlms(WmallDecodeCtx *s)
                 s->cdlms[0][0].order = 0;
                 return AVERROR_INVALIDDATA;
             }
+            if(s->cdlms[c][i].order & 8) {
+                static int warned;
+                if(!warned)
+                    avpriv_request_sample(s->avctx, "CDLMS of order %d",
+                                          s->cdlms[c][i].order);
+                warned = 1;
+            }
         }
 
         for (i = 0; i < s->cdlms_ttl[c]; i++)
@@ -482,6 +494,10 @@ static int decode_cdlms(WmallDecodeCtx *s)
                         (get_bits(&s->gb, s->cdlms[c][i].bitsend) << shift_l) >> shift_r;
             }
         }
+
+        for (i = 0; i < s->cdlms_ttl[c]; i++)
+            memset(s->cdlms[c][i].coefs + s->cdlms[c][i].order,
+                   0, WMALL_COEFF_PAD_SIZE);
     }
 
     return 0;
@@ -652,10 +668,10 @@ static void mclms_update(WmallDecodeCtx *s, int icoef, int *pred)
     if (s->mclms_recent == 0) {
         memcpy(&s->mclms_prevvalues[order * num_channels],
                s->mclms_prevvalues,
-               2 * order * num_channels);
+               sizeof(int16_t) * order * num_channels);
         memcpy(&s->mclms_updates[order * num_channels],
                s->mclms_updates,
-               2 * order * num_channels);
+               sizeof(int16_t) * order * num_channels);
         s->mclms_recent = num_channels * order;
     }
 }
@@ -691,34 +707,10 @@ static void revert_mclms(WmallDecodeCtx *s, int tile_size)
     }
 }
 
-static int lms_predict(WmallDecodeCtx *s, int ich, int ilms)
+static void lms_update(WmallDecodeCtx *s, int ich, int ilms, int input)
 {
-    int pred = 0, icoef;
-    int recent = s->cdlms[ich][ilms].recent;
-
-    for (icoef = 0; icoef < s->cdlms[ich][ilms].order; icoef++)
-        pred += s->cdlms[ich][ilms].coefs[icoef] *
-                s->cdlms[ich][ilms].lms_prevvalues[icoef + recent];
-
-    return pred;
-}
-
-static void lms_update(WmallDecodeCtx *s, int ich, int ilms,
-                       int input, int residue)
-{
-    int icoef;
     int recent = s->cdlms[ich][ilms].recent;
     int range  = 1 << s->bits_per_sample - 1;
-
-    if (residue < 0) {
-        for (icoef = 0; icoef < s->cdlms[ich][ilms].order; icoef++)
-            s->cdlms[ich][ilms].coefs[icoef] -=
-                s->cdlms[ich][ilms].lms_updates[icoef + recent];
-    } else if (residue > 0) {
-        for (icoef = 0; icoef < s->cdlms[ich][ilms].order; icoef++)
-            s->cdlms[ich][ilms].coefs[icoef] +=
-                s->cdlms[ich][ilms].lms_updates[icoef + recent];
-    }
 
     if (recent)
         recent--;
@@ -780,6 +772,9 @@ static void use_normal_update_speed(WmallDecodeCtx *s, int ich)
     s->update_speed[ich] = 8;
 }
 
+/** Get sign of integer (1 for positive, -1 for negative and 0 for zero) */
+#define WMASIGN(x) ((x > 0) - (x < 0))
+
 static void revert_cdlms(WmallDecodeCtx *s, int ch,
                          int coef_begin, int coef_end)
 {
@@ -790,12 +785,19 @@ static void revert_cdlms(WmallDecodeCtx *s, int ch,
         for (icoef = coef_begin; icoef < coef_end; icoef++) {
             pred = 1 << (s->cdlms[ch][ilms].scaling - 1);
             residue = s->channel_residues[ch][icoef];
-            pred += lms_predict(s, ch, ilms);
+            pred += s->dsp.scalarproduct_and_madd_int16(s->cdlms[ch][ilms].coefs,
+                                                        s->cdlms[ch][ilms].lms_prevvalues
+                                                            + s->cdlms[ch][ilms].recent,
+                                                        s->cdlms[ch][ilms].lms_updates
+                                                            + s->cdlms[ch][ilms].recent,
+                                                        s->cdlms[ch][ilms].order,
+                                                        WMASIGN(residue));
             input = residue + (pred >> s->cdlms[ch][ilms].scaling);
-            lms_update(s, ch, ilms, input, residue);
+            lms_update(s, ch, ilms, input);
             s->channel_residues[ch][icoef] = input;
         }
     }
+    emms_c();
 }
 
 static void revert_inter_ch_decorr(WmallDecodeCtx *s, int tile_size)
@@ -994,7 +996,7 @@ static int decode_subframe(WmallDecodeCtx *s)
             if (s->bits_per_sample == 16) {
                 *s->samples_16[c]++ = (int16_t) s->channel_residues[c][j] << padding_zeroes;
             } else {
-                *s->samples_32[c]++ = s->channel_residues[c][j] << padding_zeroes;
+                *s->samples_32[c]++ = s->channel_residues[c][j] << (padding_zeroes + 8);
             }
         }
     }
@@ -1038,9 +1040,10 @@ static int decode_frame(WmallDecodeCtx *s)
         len = get_bits(gb, s->log2_frame_size);
 
     /* decode tile information */
-    if (decode_tilehdr(s)) {
+    if ((ret = decode_tilehdr(s))) {
         s->packet_loss = 1;
-        return 0;
+        av_frame_unref(s->frame);
+        return ret;
     }
 
     /* read drc info */
@@ -1075,8 +1078,11 @@ static int decode_frame(WmallDecodeCtx *s)
 
     /* decode all subframes */
     while (!s->parsed_all_subframes) {
+        int decoded_samples = s->channel[0].decoded_samples;
         if (decode_subframe(s) < 0) {
             s->packet_loss = 1;
+            if (s->frame->nb_samples)
+                s->frame->nb_samples = decoded_samples;
             return 0;
         }
     }
@@ -1090,7 +1096,8 @@ static int decode_frame(WmallDecodeCtx *s)
         if (len != (get_bits_count(gb) - s->frame_offset) + 2) {
             /* FIXME: not sure if this is always an error */
             av_log(s->avctx, AV_LOG_ERROR,
-                   "frame[%i] would have to skip %i bits\n", s->frame_num,
+                   "frame[%"PRIu32"] would have to skip %i bits\n",
+                   s->frame_num,
                    len - (get_bits_count(gb) - s->frame_offset) - 1);
             s->packet_loss = 1;
             return 0;
@@ -1209,7 +1216,8 @@ static int decode_packet(AVCodecContext *avctx, void *data, int *got_frame_ptr,
         if (!s->packet_loss &&
             ((s->packet_sequence_number + 1) & 0xF) != packet_sequence_number) {
             s->packet_loss = 1;
-            av_log(avctx, AV_LOG_ERROR, "Packet loss detected! seq %x vs %x\n",
+            av_log(avctx, AV_LOG_ERROR,
+                   "Packet loss detected! seq %"PRIx8" vs %x\n",
                    s->packet_sequence_number, packet_sequence_number);
         }
         s->packet_sequence_number = packet_sequence_number;

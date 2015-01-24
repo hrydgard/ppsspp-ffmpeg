@@ -71,7 +71,7 @@ enum var_name {
     VARS_NB
 };
 
-typedef struct {
+typedef struct ScaleContext {
     const AVClass *class;
     struct SwsContext *sws;     ///< software scaler context
     struct SwsContext *isws[2]; ///< software scaler context for interlaced material
@@ -81,6 +81,7 @@ typedef struct {
      * New dimensions. Special values are:
      *   0 = original width/height
      *  -1 = keep original aspect
+     *  -N = try to keep aspect but make sure it is divisible by N
      */
     int w, h;
     char *size_str;
@@ -177,25 +178,31 @@ static int query_formats(AVFilterContext *ctx)
     int ret;
 
     if (ctx->inputs[0]) {
+        const AVPixFmtDescriptor *desc = NULL;
         formats = NULL;
-        for (pix_fmt = 0; pix_fmt < AV_PIX_FMT_NB; pix_fmt++)
+        while ((desc = av_pix_fmt_desc_next(desc))) {
+            pix_fmt = av_pix_fmt_desc_get_id(desc);
             if ((sws_isSupportedInput(pix_fmt) ||
                  sws_isSupportedEndiannessConversion(pix_fmt))
                 && (ret = ff_add_format(&formats, pix_fmt)) < 0) {
                 ff_formats_unref(&formats);
                 return ret;
             }
+        }
         ff_formats_ref(formats, &ctx->inputs[0]->out_formats);
     }
     if (ctx->outputs[0]) {
+        const AVPixFmtDescriptor *desc = NULL;
         formats = NULL;
-        for (pix_fmt = 0; pix_fmt < AV_PIX_FMT_NB; pix_fmt++)
+        while ((desc = av_pix_fmt_desc_next(desc))) {
+            pix_fmt = av_pix_fmt_desc_get_id(desc);
             if ((sws_isSupportedOutput(pix_fmt) || pix_fmt == AV_PIX_FMT_PAL8 ||
                  sws_isSupportedEndiannessConversion(pix_fmt))
                 && (ret = ff_add_format(&formats, pix_fmt)) < 0) {
                 ff_formats_unref(&formats);
                 return ret;
             }
+        }
         ff_formats_ref(formats, &ctx->outputs[0]->in_formats);
     }
 
@@ -236,6 +243,7 @@ static int config_props(AVFilterLink *outlink)
     double var_values[VARS_NB], res;
     char *expr;
     int ret;
+    int factor_w, factor_h;
 
     var_values[VAR_IN_W]  = var_values[VAR_IW] = inlink->w;
     var_values[VAR_IN_H]  = var_values[VAR_IH] = inlink->h;
@@ -270,23 +278,35 @@ static int config_props(AVFilterLink *outlink)
     w = scale->w;
     h = scale->h;
 
-    /* sanity check params */
-    if (w <  -1 || h <  -1) {
-        av_log(ctx, AV_LOG_ERROR, "Size values less than -1 are not acceptable.\n");
-        return AVERROR(EINVAL);
+    /* Check if it is requested that the result has to be divisible by a some
+     * factor (w or h = -n with n being the factor). */
+    factor_w = 1;
+    factor_h = 1;
+    if (w < -1) {
+        factor_w = -w;
     }
-    if (w == -1 && h == -1)
+    if (h < -1) {
+        factor_h = -h;
+    }
+
+    if (w < 0 && h < 0)
         scale->w = scale->h = 0;
 
     if (!(w = scale->w))
         w = inlink->w;
     if (!(h = scale->h))
         h = inlink->h;
-    if (w == -1)
-        w = av_rescale(h, inlink->w, inlink->h);
-    if (h == -1)
-        h = av_rescale(w, inlink->h, inlink->w);
 
+    /* Make sure that the result is divisible by the factor we determined
+     * earlier. If no factor was set, it is nothing will happen as the default
+     * factor is 1 */
+    if (w < 0)
+        w = av_rescale(h, inlink->w, inlink->h * factor_w) * factor_w;
+    if (h < 0)
+        h = av_rescale(w, inlink->h, inlink->w * factor_h) * factor_h;
+
+    /* Note that force_original_aspect_ratio may overwrite the previous set
+     * dimensions so that it is not divisible by the set factors anymore. */
     if (scale->force_original_aspect_ratio) {
         int tmp_w = av_rescale(h, inlink->w, inlink->h);
         int tmp_h = av_rescale(w, inlink->h, inlink->w);
@@ -352,6 +372,17 @@ static int config_props(AVFilterLink *outlink)
             av_opt_set_int(*s, "dsth", outlink->h >> !!i, 0);
             av_opt_set_int(*s, "dst_format", outfmt, 0);
             av_opt_set_int(*s, "sws_flags", scale->flags, 0);
+
+            /* Override YUV420P settings to have the correct (MPEG-2) chroma positions
+             * MPEG-2 chroma positions are used by convention
+             * XXX: support other 4:2:0 pixel formats */
+            if (inlink->format == AV_PIX_FMT_YUV420P) {
+                scale->in_v_chr_pos = (i == 0) ? 128 : (i == 1) ? 64 : 192;
+            }
+
+            if (outlink->format == AV_PIX_FMT_YUV420P) {
+                scale->out_v_chr_pos = (i == 0) ? 128 : (i == 1) ? 64 : 192;
+            }
 
             av_opt_set_int(*s, "src_h_chr_pos", scale->in_h_chr_pos, 0);
             av_opt_set_int(*s, "src_v_chr_pos", scale->in_v_chr_pos, 0);
@@ -537,10 +568,10 @@ static const AVOption scale_options[] = {
     { "mpeg",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_MPEG}, 0, 0, FLAGS, "range" },
     { "tv",     NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_MPEG}, 0, 0, FLAGS, "range" },
     { "pc",     NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_JPEG}, 0, 0, FLAGS, "range" },
-    { "in_v_chr_pos",   "input vertical chroma position in luma grid/256"  , OFFSET(in_v_chr_pos), AV_OPT_TYPE_INT, { .i64 = -1}, -1, 512, FLAGS },
-    { "in_h_chr_pos",   "input horizontal chroma position in luma grid/256", OFFSET(in_h_chr_pos), AV_OPT_TYPE_INT, { .i64 = -1}, -1, 512, FLAGS },
-    { "out_v_chr_pos",   "output vertical chroma position in luma grid/256"  , OFFSET(out_v_chr_pos), AV_OPT_TYPE_INT, { .i64 = -1}, -1, 512, FLAGS },
-    { "out_h_chr_pos",   "output horizontal chroma position in luma grid/256", OFFSET(out_h_chr_pos), AV_OPT_TYPE_INT, { .i64 = -1}, -1, 512, FLAGS },
+    { "in_v_chr_pos",   "input vertical chroma position in luma grid/256"  ,   OFFSET(in_v_chr_pos),  AV_OPT_TYPE_INT, { .i64 = -513}, -513, 512, FLAGS },
+    { "in_h_chr_pos",   "input horizontal chroma position in luma grid/256",   OFFSET(in_h_chr_pos),  AV_OPT_TYPE_INT, { .i64 = -513}, -513, 512, FLAGS },
+    { "out_v_chr_pos",   "output vertical chroma position in luma grid/256"  , OFFSET(out_v_chr_pos), AV_OPT_TYPE_INT, { .i64 = -513}, -513, 512, FLAGS },
+    { "out_h_chr_pos",   "output horizontal chroma position in luma grid/256", OFFSET(out_h_chr_pos), AV_OPT_TYPE_INT, { .i64 = -513}, -513, 512, FLAGS },
     { "force_original_aspect_ratio", "decrease or increase w/h if necessary to keep the original AR", OFFSET(force_original_aspect_ratio), AV_OPT_TYPE_INT, { .i64 = 0}, 0, 2, FLAGS, "force_oar" },
     { "disable",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 0 }, 0, 0, FLAGS, "force_oar" },
     { "decrease", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 1 }, 0, 0, FLAGS, "force_oar" },
@@ -553,6 +584,7 @@ static const AVClass scale_class = {
     .item_name        = av_default_item_name,
     .option           = scale_options,
     .version          = LIBAVUTIL_VERSION_INT,
+    .category         = AV_CLASS_CATEGORY_FILTER,
     .child_class_next = child_class_next,
 };
 

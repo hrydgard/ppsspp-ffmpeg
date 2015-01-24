@@ -73,9 +73,8 @@ int ff_mpeg4_find_frame_end(ParseContext *pc, const uint8_t *buf, int buf_size)
 }
 
 /* XXX: make it use less memory */
-static int av_mpeg4_decode_header(AVCodecParserContext *s1,
-                                  AVCodecContext *avctx,
-                                  const uint8_t *buf, int buf_size)
+static int mpeg4_decode_header(AVCodecParserContext *s1, AVCodecContext *avctx,
+                               const uint8_t *buf, int buf_size)
 {
     struct Mp4vParseContext *pc = s1->priv_data;
     Mpeg4DecContext *dec_ctx = &pc->dec_ctx;
@@ -89,6 +88,8 @@ static int av_mpeg4_decode_header(AVCodecParserContext *s1,
     if (avctx->extradata_size && pc->first_picture) {
         init_get_bits(gb, avctx->extradata, avctx->extradata_size * 8);
         ret = ff_mpeg4_decode_picture_header(dec_ctx, gb);
+        if (ret < -1)
+            av_log(avctx, AV_LOG_WARNING, "Failed to parse extradata\n");
     }
 
     init_get_bits(gb, buf, 8 * buf_size);
@@ -143,7 +144,7 @@ static int mpeg4video_parse(AVCodecParserContext *s,
             return buf_size;
         }
     }
-    av_mpeg4_decode_header(s, avctx, buf, buf_size);
+    mpeg4_decode_header(s, avctx, buf, buf_size);
 
     *poutbuf      = buf;
     *poutbuf_size = buf_size;

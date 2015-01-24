@@ -28,6 +28,8 @@
  *  http://wiki.multimedia.cx/index.php?title=Bink_Container
  */
 
+#include <inttypes.h>
+
 #include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
 #include "avformat.h"
@@ -81,6 +83,7 @@ static int read_header(AVFormatContext *s)
     uint32_t pos, next_pos;
     uint16_t flags;
     int keyframe;
+    int ret;
 
     vst = avformat_new_stream(s, NULL);
     if (!vst)
@@ -110,7 +113,9 @@ static int read_header(AVFormatContext *s)
     fps_num = avio_rl32(pb);
     fps_den = avio_rl32(pb);
     if (fps_num == 0 || fps_den == 0) {
-        av_log(s, AV_LOG_ERROR, "invalid header: invalid fps (%d/%d)\n", fps_num, fps_den);
+        av_log(s, AV_LOG_ERROR,
+               "invalid header: invalid fps (%"PRIu32"/%"PRIu32")\n",
+               fps_num, fps_den);
         return AVERROR(EIO);
     }
     avpriv_set_pts_info(vst, 64, fps_den, fps_num);
@@ -131,7 +136,7 @@ static int read_header(AVFormatContext *s)
 
     if (bink->num_audio_tracks > BINK_MAX_AUDIO_TRACKS) {
         av_log(s, AV_LOG_ERROR,
-               "invalid header: more than "AV_STRINGIFY(BINK_MAX_AUDIO_TRACKS)" audio tracks (%d)\n",
+               "invalid header: more than "AV_STRINGIFY(BINK_MAX_AUDIO_TRACKS)" audio tracks (%"PRIu32")\n",
                bink->num_audio_tracks);
         return AVERROR(EIO);
     }
@@ -184,11 +189,12 @@ static int read_header(AVFormatContext *s)
             av_log(s, AV_LOG_ERROR, "invalid frame index table\n");
             return AVERROR(EIO);
         }
-        av_add_index_entry(vst, pos, i, next_pos - pos, 0,
-                           keyframe ? AVINDEX_KEYFRAME : 0);
+        if ((ret = av_add_index_entry(vst, pos, i, next_pos - pos, 0,
+                                      keyframe ? AVINDEX_KEYFRAME : 0)) < 0)
+            return ret;
     }
 
-    avio_skip(pb, 4);
+    avio_seek(pb, vst->index_entries[0].pos, SEEK_SET);
 
     bink->current_track = -1;
     return 0;
@@ -224,7 +230,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         uint32_t audio_size = avio_rl32(pb);
         if (audio_size > bink->remain_packet_size - 4) {
             av_log(s, AV_LOG_ERROR,
-                   "frame %"PRId64": audio size in header (%u) > size of packet left (%u)\n",
+                   "frame %"PRId64": audio size in header (%"PRIu32") > size of packet left (%"PRIu32")\n",
                    bink->video_pts, audio_size, bink->remain_packet_size);
             return AVERROR(EIO);
         }
@@ -287,4 +293,5 @@ AVInputFormat ff_bink_demuxer = {
     .read_header    = read_header,
     .read_packet    = read_packet,
     .read_seek      = read_seek,
+    .flags          = AVFMT_SHOW_IDS,
 };

@@ -43,6 +43,7 @@ static int parse(AVCodecParserContext *ctx,
                  const uint8_t *data, int size)
 {
     VP9ParseContext *s = ctx->priv_data;
+    int full_size = size;
     int marker;
 
     if (size <= 0) {
@@ -73,14 +74,16 @@ static int parse(AVCodecParserContext *ctx,
 #define case_n(a, rd) \
             case a: \
                 while (n_frames--) { \
-                    int sz = rd; \
+                    unsigned sz = rd; \
                     idx += a; \
                     if (sz > size) { \
                         s->n_frames = 0; \
-                        av_log(ctx, AV_LOG_ERROR, \
-                               "Superframe packet size too big: %d > %d\n", \
+                        *out_size = size; \
+                        *out_data = data; \
+                        av_log(avctx, AV_LOG_ERROR, \
+                               "Superframe packet size too big: %u > %d\n", \
                                sz, size); \
-                        return AVERROR_INVALIDDATA; \
+                        return full_size; \
                     } \
                     if (first) { \
                         first = 0; \

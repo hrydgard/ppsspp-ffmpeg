@@ -22,6 +22,7 @@
 
 #include <string.h>
 
+#include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
@@ -311,8 +312,13 @@ static void decode_interframe_v4a(AVCodecContext *avctx, uint8_t *src,
             offset  = writeoffset;
             offset += bytestream2_get_le16(&gb);
 
-            if (delta)
+            if (delta) {
+                if (offset < 0x10000) {
+                    av_log(avctx, AV_LOG_ERROR, "Attempting to read out of bounds\n");
+                    break;
+                }
                 offset -= 0x10000;
+            }
 
             if (offset + hnm->width + count >= hnm->width * hnm->height) {
                 av_log(avctx, AV_LOG_ERROR, "Attempting to read out of bounds\n");
@@ -448,12 +454,17 @@ static int hnm_decode_frame(AVCodecContext *avctx, void *data,
 static av_cold int hnm_decode_init(AVCodecContext *avctx)
 {
     Hnm4VideoContext *hnm = avctx->priv_data;
+    int ret;
 
     if (avctx->extradata_size < 1) {
         av_log(avctx, AV_LOG_ERROR,
                "Extradata missing, decoder requires version number\n");
         return AVERROR_INVALIDDATA;
     }
+
+    ret = av_image_check_size(avctx->width, avctx->height, 0, avctx);
+    if (ret < 0)
+        return ret;
 
     hnm->version   = avctx->extradata[0];
     avctx->pix_fmt = AV_PIX_FMT_PAL8;

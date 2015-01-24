@@ -112,8 +112,10 @@ void ff_id3v2_read_dict(AVIOContext *pb, AVDictionary **metadata, const char *ma
  *
  * @param extra_meta If not NULL, extra metadata is parsed into a list of
  * ID3v2ExtraMeta structs and *extra_meta points to the head of the list
+ * @param[opt] max_search_search restrict ID3 magic number search (bytes from start)
  */
-void ff_id3v2_read(AVFormatContext *s, const char *magic, ID3v2ExtraMeta **extra_meta);
+void ff_id3v2_read(AVFormatContext *s, const char *magic, ID3v2ExtraMeta **extra_meta,
+                   unsigned int max_search_size);
 
 /**
  * Initialize an ID3v2 tag.
@@ -134,7 +136,7 @@ int ff_id3v2_write_apic(AVFormatContext *s, ID3v2EncContext *id3, AVPacket *pkt)
 /**
  * Finalize an opened ID3v2 tag.
  */
-void ff_id3v2_finish(ID3v2EncContext *id3, AVIOContext *pb);
+void ff_id3v2_finish(ID3v2EncContext *id3, AVIOContext *pb, int padding_bytes);
 
 /**
  * Write an ID3v2 tag containing all global metadata from s.

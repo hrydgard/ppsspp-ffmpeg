@@ -34,6 +34,12 @@
 #   define T @
 #endif
 
+#if HAVE_AS_FUNC
+#   define FUNC
+#else
+#   define FUNC @
+#endif
+
 #if   HAVE_NEON
         .arch           armv7-a
 #elif HAVE_ARMV6T2
@@ -53,8 +59,9 @@
         .syntax unified
 T       .thumb
 ELF     .eabi_attribute 25, 1           @ Tag_ABI_align_preserved
+ELF     .section .note.GNU-stack,"",%progbits @ Mark stack as non-executable
 
-.macro  function name, export=0
+.macro  function name, export=0, align=2
         .set            .Lpic_idx, 0
         .set            .Lpic_gp, 0
     .macro endfunc
@@ -65,26 +72,33 @@ ELF     .eabi_attribute 25, 1           @ Tag_ABI_align_preserved
         .noaltmacro
       .endif
 ELF     .size   \name, . - \name
-        .endfunc
+FUNC    .endfunc
         .purgem endfunc
     .endm
         .text
-        .align          2
+        .align          \align
     .if \export
         .global EXTERN_ASM\name
+ELF     .type   EXTERN_ASM\name, %function
+FUNC    .func   EXTERN_ASM\name
 EXTERN_ASM\name:
-    .endif
+    .else
 ELF     .type   \name, %function
-        .func   \name
+FUNC    .func   \name
 \name:
+    .endif
 .endm
 
-.macro  const   name, align=2
+.macro  const   name, align=2, relocate=0
     .macro endconst
 ELF     .size   \name, . - \name
         .purgem endconst
     .endm
+.if HAVE_SECTION_DATA_REL_RO && \relocate
+        .section        .data.rel.ro
+.else
         .section        .rodata
+.endif
         .align          \align
 \name:
 .endm
@@ -210,6 +224,13 @@ T       ldr             \rt, [\rt]
 A       ldr             \rt, [\rn], \rm
 T       ldr             \rt, [\rn]
 T       add             \rn, \rn, \rm
+.endm
+
+.macro  ldrc_pre        cc,  rt,  rn,  rm:vararg
+A       ldr\cc          \rt, [\rn, \rm]!
+T       itt             \cc
+T       add\cc          \rn, \rn, \rm
+T       ldr\cc          \rt, [\rn]
 .endm
 
 .macro  ldrd_reg        rt,  rt2, rn,  rm

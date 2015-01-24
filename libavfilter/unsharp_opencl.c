@@ -29,7 +29,7 @@
 #include "libavutil/opencl_internal.h"
 
 #define PLANE_NUM 3
-#define ROUND_TO_16(a) ((((a- 1)/16)+1)*16)
+#define ROUND_TO_16(a) (((((a) - 1)/16)+1)*16)
 
 static inline void add_mask_counter(uint32_t *dst, uint32_t *counter1, uint32_t *counter2, int len)
 {
@@ -54,7 +54,7 @@ static int compute_mask(int step, uint32_t *mask)
         ret = AVERROR(ENOMEM);
         goto end;
     }
-    counter = av_mallocz(sizeof(uint32_t *) * (2 * step + 1));
+    counter = av_mallocz_array(2 * step + 1, sizeof(uint32_t *));
     if (!counter) {
         ret = AVERROR(ENOMEM);
         goto end;
@@ -92,12 +92,12 @@ static int compute_mask_matrix(cl_mem cl_mask_matrix, int step_x, int step_y)
     int i, j, ret = 0;
     uint32_t *mask_matrix, *mask_x, *mask_y;
     size_t size_matrix = sizeof(uint32_t) * (2 * step_x + 1) * (2 * step_y + 1);
-    mask_x = av_mallocz(sizeof(uint32_t) * (2 * step_x + 1));
+    mask_x = av_mallocz_array(2 * step_x + 1, sizeof(uint32_t));
     if (!mask_x) {
         ret = AVERROR(ENOMEM);
         goto end;
     }
-    mask_y = av_mallocz(sizeof(uint32_t) * (2 * step_y + 1));
+    mask_y = av_mallocz_array(2 * step_y + 1, sizeof(uint32_t));
     if (!mask_y) {
         ret = AVERROR(ENOMEM);
         goto end;
@@ -181,7 +181,7 @@ int ff_opencl_apply_unsharp(AVFilterContext *ctx, AVFrame *in, AVFrame *out)
 
         kernel1.ctx = ctx;
         kernel1.kernel = unsharp->opencl_ctx.kernel_luma;
-        ret = ff_opencl_set_parameter(&kernel1,
+        ret = avpriv_opencl_set_parameter(&kernel1,
                                       FF_OPENCL_PARAM_INFO(unsharp->opencl_ctx.cl_inbuf),
                                       FF_OPENCL_PARAM_INFO(unsharp->opencl_ctx.cl_outbuf),
                                       FF_OPENCL_PARAM_INFO(unsharp->opencl_ctx.cl_luma_mask),
@@ -198,7 +198,7 @@ int ff_opencl_apply_unsharp(AVFilterContext *ctx, AVFrame *in, AVFrame *out)
 
         kernel2.ctx = ctx;
         kernel2.kernel = unsharp->opencl_ctx.kernel_chroma;
-        ret = ff_opencl_set_parameter(&kernel2,
+        ret = avpriv_opencl_set_parameter(&kernel2,
                                       FF_OPENCL_PARAM_INFO(unsharp->opencl_ctx.cl_inbuf),
                                       FF_OPENCL_PARAM_INFO(unsharp->opencl_ctx.cl_outbuf),
                                       FF_OPENCL_PARAM_INFO(unsharp->opencl_ctx.cl_chroma_mask),
@@ -230,7 +230,7 @@ int ff_opencl_apply_unsharp(AVFilterContext *ctx, AVFrame *in, AVFrame *out)
         kernel1.ctx = ctx;
         kernel1.kernel = unsharp->opencl_ctx.kernel_default;
 
-        ret = ff_opencl_set_parameter(&kernel1,
+        ret = avpriv_opencl_set_parameter(&kernel1,
                                       FF_OPENCL_PARAM_INFO(unsharp->opencl_ctx.cl_inbuf),
                                       FF_OPENCL_PARAM_INFO(unsharp->opencl_ctx.cl_outbuf),
                                       FF_OPENCL_PARAM_INFO(unsharp->opencl_ctx.cl_luma_mask),
