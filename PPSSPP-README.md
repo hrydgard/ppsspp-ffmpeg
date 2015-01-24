@@ -21,6 +21,9 @@ Building for Android on Windows
 ===============================
 
 * Install a proper msys environment (don't use the one from msys-git)
+  
+  Install: mingw32-base, mingw32-gcc, msys-base, msys-core, msys-coreutils, mingw-developer-tools
+
 * CD to the directory and run ./android-build.sh  (first adjust the paths within).
 
 
