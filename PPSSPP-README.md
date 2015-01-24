@@ -20,27 +20,37 @@ Instead of ./configure, just run ./windows_x86-build.sh.
 Building for Android on Windows
 ===============================
 
-* Install a proper msys environment (don't use the one from msys-git)
+  * Install a proper msys environment (don't use the one from msys-git)
   
-  Install: mingw32-base, mingw32-gcc, msys-base, msys-core, msys-coreutils, mingw-developer-tools
+  * Install: mingw32-base, mingw32-gcc, msys-base, msys-core, msys-coreutils, mingw-developer-tools
 
-* Install yasm as yasm.exe in mingw/msys/1.0/bin. http://yasm.tortall.net/Download.html
+	* Install yasm as yasm.exe in mingw/msys/1.0/bin. http://yasm.tortall.net/Download.html
 
-* CD to the directory and run ./android-build.sh  (first adjust the paths within).
+	* CD to the directory and run ./android-build.sh  (first adjust the paths within).
+
 
 Building for Windows
 ====================
 
-mv /bin/link.exe /bin/mingw_link.exe
+    mv /mingw/msys/1.0/bin/link.exe /mingw/msys/1.0/bin/mingw_link.exe
 
-Start "VS2013 x86 Native Tools Command Prompt"
-Start msys from within the prompt you get
-./windows_x86_build.sh
+  * Start "VS2013 x86 Native Tools Command Prompt"
+  * Start msys from within the prompt you get
+  * ./windows_x86_build.sh
 
-Same three steps for x86 (x64 Native Tools etc)
+  * Same three steps for x64 (x64 Native Tools etc)
+
+
+Building for Mac
+================
+
+    brew install yasm
+    rm -rf macosx/x86_64
+    ./mac_x86-64.sh
+
 
 Errors
-==============
+======
 
 If you get `*** missing separator. Stop`, it's a line ending problem.  You can fix
 this by running the following commands (WARNING: this will delete all your changes.)
