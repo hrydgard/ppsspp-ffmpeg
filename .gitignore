@@ -30,6 +30,7 @@ build.log
 /ffserver
 /config.*
 /version.h
+conflog.txt
 /doc/*.1
 /doc/*.3
 /doc/*.html
@@ -74,3 +75,4 @@ build.log
 /tools/qt-faststart
 /tools/trasher
 /tools/seek_print
+libavutil/ffversion.h
