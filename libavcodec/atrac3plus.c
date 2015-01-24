@@ -1726,8 +1726,9 @@ static int decode_tones_info(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
         get_subband_flags(gb, ctx->waves_info->tone_master,  ctx->waves_info->num_tone_bands);
         if (get_subband_flags(gb, ctx->waves_info->phase_shift,
                               ctx->waves_info->num_tone_bands)) {
-            avpriv_report_missing_feature(avctx, "GHA Phase shifting");
-            return AVERROR_PATCHWELCOME;
+            // PPSSPP CHANGE: Add back GHA phase shifting
+            // avpriv_report_missing_feature(avctx, "GHA Phase shifting");
+            // return AVERROR_PATCHWELCOME;
         }
     }
 

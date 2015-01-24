@@ -146,6 +146,16 @@ static void waves_synth(Atrac3pWaveSynthParams *synth_param,
         }
     }
 
+    // PPSSPP CHANGE: Add back GHA phase shifting
+    /* 180 degree phase shift if requested */
+    if (phase_shift) {
+        pos = envelope->has_stop_point ? (envelope->stop_pos + 1 << 2) - reg_offset : 128;
+        if (pos > 0 && pos <= 128) {
+            for (i = envelope->has_start_point ? (envelope->start_pos << 2) - reg_offset : 0; i < pos; i++)
+                out[i] *= -1.0f;
+        }
+    }
+
     /* fade in with steep Hann window if requested */
     if (envelope->has_start_point) {
         pos = (envelope->start_pos << 2) - reg_offset;
