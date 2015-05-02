@@ -221,7 +221,8 @@ static void filter(FSPPContext *p, uint8_t *dst, uint8_t *src,
             p->row_fdct(block + 8 * 8, p->src + y * stride + 8 + x0 + 2 - (y & 1), stride, (es - 4) >> 2);
 
         p->column_fidct((int16_t *)(&p->threshold_mtx[0]), block, block3, es&(~1));
-        p->row_idct(block3 + 0 * 8, p->temp + (y & 15) * stride + x0 + 2 - (y & 1), stride, es >> 2);
+        if (es > 3)
+            p->row_idct(block3 + 0 * 8, p->temp + (y & 15) * stride + x0 + 2 - (y & 1), stride, es >> 2);
 
         if (!(y1 & 7) && y1) {
             if (y1 & 8)
@@ -491,7 +492,7 @@ static void row_fdct_c(int16_t *data, const uint8_t *pixels, ptrdiff_t line_size
 
 static int query_formats(AVFilterContext *ctx)
 {
-    static const enum PixelFormat pix_fmts[] = {
+    static const enum AVPixelFormat pix_fmts[] = {
         AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV422P,
         AV_PIX_FMT_YUV420P,  AV_PIX_FMT_YUV411P,
         AV_PIX_FMT_YUV410P,  AV_PIX_FMT_YUV440P,
@@ -500,8 +501,11 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_GBRP, AV_PIX_FMT_GRAY8,
         AV_PIX_FMT_NONE
     };
-    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
-    return 0;
+
+    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
+    if (!fmts_list)
+        return AVERROR(ENOMEM);
+    return ff_set_common_formats(ctx, fmts_list);
 }
 
 static int config_input(AVFilterLink *inlink)
@@ -626,6 +630,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                     return AVERROR(ENOMEM);
                 }
                 av_frame_copy_props(out, in);
+                out->width = in->width;
+                out->height = in->height;
             }
 
             filter(fspp, out->data[0], in->data[0], out->linesize[0], in->linesize[0],

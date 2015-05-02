@@ -74,7 +74,7 @@ void av_register_all(void)
     REGISTER_DEMUXER (ANM,              anm);
     REGISTER_DEMUXER (APC,              apc);
     REGISTER_DEMUXER (APE,              ape);
-    REGISTER_DEMUXER (APNG,             apng);
+    REGISTER_MUXDEMUX(APNG,             apng);
     REGISTER_DEMUXER (AQTITLE,          aqtitle);
     REGISTER_MUXDEMUX(ASF,              asf);
     REGISTER_MUXDEMUX(ASS,              ass);
@@ -110,6 +110,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX(DNXHD,            dnxhd);
     REGISTER_DEMUXER (DSF,              dsf);
     REGISTER_DEMUXER (DSICIN,           dsicin);
+    REGISTER_DEMUXER (DSS,              dss);
     REGISTER_MUXDEMUX(DTS,              dts);
     REGISTER_DEMUXER (DTSHD,            dtshd);
     REGISTER_MUXDEMUX(DV,               dv);
@@ -206,6 +207,7 @@ void av_register_all(void)
     REGISTER_DEMUXER (MVI,              mvi);
     REGISTER_MUXDEMUX(MXF,              mxf);
     REGISTER_MUXER   (MXF_D10,          mxf_d10);
+    REGISTER_MUXER   (MXF_OPATOM,       mxf_opatom);
     REGISTER_DEMUXER (MXG,              mxg);
     REGISTER_DEMUXER (NC,               nc);
     REGISTER_DEMUXER (NISTSPHERE,       nistsphere);
@@ -314,6 +316,7 @@ void av_register_all(void)
     REGISTER_DEMUXER (WC3,              wc3);
     REGISTER_MUXER   (WEBM,             webm);
     REGISTER_MUXDEMUX(WEBM_DASH_MANIFEST, webm_dash_manifest);
+    REGISTER_MUXER   (WEBM_CHUNK,       webm_chunk);
     REGISTER_MUXER   (WEBP,             webp);
     REGISTER_MUXDEMUX(WEBVTT,           webvtt);
     REGISTER_DEMUXER (WSAUD,            wsaud);

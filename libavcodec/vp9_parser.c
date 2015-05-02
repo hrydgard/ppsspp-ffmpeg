@@ -1,5 +1,8 @@
 /*
- * Copyright (C) 2008 Michael Niedermayer
+ * VP9 compatible video decoder
+ *
+ * Copyright (C) 2013 Ronald S. Bultje <rsbultje gmail com>
+ * Copyright (C) 2013 Clément Bœsch <u pkh me>
  *
  * This file is part of FFmpeg.
  *
@@ -24,16 +27,28 @@
 typedef struct VP9ParseContext {
     int n_frames; // 1-8
     int size[8];
+    int64_t pts;
 } VP9ParseContext;
 
 static void parse_frame(AVCodecParserContext *ctx, const uint8_t *buf, int size)
 {
+    VP9ParseContext *s = ctx->priv_data;
+
     if (buf[0] & 0x4) {
         ctx->pict_type = AV_PICTURE_TYPE_P;
         ctx->key_frame = 0;
     } else {
         ctx->pict_type = AV_PICTURE_TYPE_I;
         ctx->key_frame = 1;
+    }
+
+    if (buf[0] & 0x2) {
+        if (ctx->pts == AV_NOPTS_VALUE)
+            ctx->pts = s->pts;
+        s->pts = AV_NOPTS_VALUE;
+    } else {
+        s->pts = ctx->pts;
+        ctx->pts = AV_NOPTS_VALUE;
     }
 }
 

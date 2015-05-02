@@ -65,8 +65,8 @@ int swr_set_matrix(struct SwrContext *s, const double *matrix, int stride)
     if (!s || s->in_convert) // s needs to be allocated but not initialized
         return AVERROR(EINVAL);
     memset(s->matrix, 0, sizeof(s->matrix));
-    nb_in  = av_get_channel_layout_nb_channels(s->in_ch_layout);
-    nb_out = av_get_channel_layout_nb_channels(s->out_ch_layout);
+    nb_in  = av_get_channel_layout_nb_channels(s->user_in_ch_layout);
+    nb_out = av_get_channel_layout_nb_channels(s->user_out_ch_layout);
     for (out = 0; out < nb_out; out++) {
         for (in = 0; in < nb_in; in++)
             s->matrix[out][in] = matrix[in];
@@ -415,7 +415,8 @@ av_cold int swri_rematrix_init(SwrContext *s){
         s->matrix_ch[i][0]= ch_in;
     }
 
-    if(HAVE_YASM && HAVE_MMX) swri_rematrix_init_x86(s);
+    if(HAVE_YASM && HAVE_MMX)
+        return swri_rematrix_init_x86(s);
 
     return 0;
 }

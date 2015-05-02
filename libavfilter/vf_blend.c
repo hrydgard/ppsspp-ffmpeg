@@ -369,8 +369,10 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_GBRP, AV_PIX_FMT_GBRAP, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE
     };
 
-    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
-    return 0;
+    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
+    if (!fmts_list)
+        return AVERROR(ENOMEM);
+    return ff_set_common_formats(ctx, fmts_list);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
@@ -379,7 +381,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     int i;
 
     ff_dualinput_uninit(&b->dinput);
-    av_freep(&b->prev_frame);
+    av_frame_free(&b->prev_frame);
 
     for (i = 0; i < FF_ARRAY_ELEMS(b->params); i++)
         av_expr_free(b->params[i].e);

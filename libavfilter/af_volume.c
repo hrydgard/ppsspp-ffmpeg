@@ -153,23 +153,26 @@ static int query_formats(AVFilterContext *ctx)
             AV_SAMPLE_FMT_NONE
         }
     };
+    int ret;
 
     layouts = ff_all_channel_counts();
     if (!layouts)
         return AVERROR(ENOMEM);
-    ff_set_common_channel_layouts(ctx, layouts);
+    ret = ff_set_common_channel_layouts(ctx, layouts);
+    if (ret < 0)
+        return ret;
 
     formats = ff_make_format_list(sample_fmts[vol->precision]);
     if (!formats)
         return AVERROR(ENOMEM);
-    ff_set_common_formats(ctx, formats);
+    ret = ff_set_common_formats(ctx, formats);
+    if (ret < 0)
+        return ret;
 
     formats = ff_all_samplerates();
     if (!formats)
         return AVERROR(ENOMEM);
-    ff_set_common_samplerates(ctx, formats);
-
-    return 0;
+    return ff_set_common_samplerates(ctx, formats);
 }
 
 static inline void scale_samples_u8(uint8_t *dst, const uint8_t *src,
@@ -402,7 +405,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     }
 
     /* do volume scaling in-place if input buffer is writable */
-    if (av_frame_is_writable(buf)) {
+    if (av_frame_is_writable(buf)
+            && (vol->precision != PRECISION_FIXED || vol->volume_i > 0)) {
         out_buf = buf;
     } else {
         out_buf = ff_get_audio_buffer(inlink, nb_samples);

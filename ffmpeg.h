@@ -92,6 +92,7 @@ typedef struct OptionsContext {
 
     /* input/output options */
     int64_t start_time;
+    int seek_timestamp;
     const char *format;
 
     SpecifierOpt *codec_names;
@@ -111,6 +112,7 @@ typedef struct OptionsContext {
     int64_t input_ts_offset;
     int rate_emu;
     int accurate_seek;
+    int thread_queue_size;
 
     SpecifierOpt *ts_scale;
     int        nb_ts_scale;
@@ -206,6 +208,8 @@ typedef struct OptionsContext {
     int        nb_apad;
     SpecifierOpt *discard;
     int        nb_discard;
+    SpecifierOpt *disposition;
+    int        nb_disposition;
 } OptionsContext;
 
 typedef struct InputFilter {
@@ -336,6 +340,7 @@ typedef struct InputFile {
     int64_t ts_offset;
     int64_t last_ts;
     int64_t start_time;   /* user-specified start time in AV_TIME_BASE or AV_NOPTS_VALUE */
+    int seek_timestamp;
     int64_t recording_time;
     int nb_streams;       /* number of stream that ffmpeg is aware of; may be different
                              from ctx.nb_streams if new streams appear during av_read_frame() */
@@ -348,6 +353,7 @@ typedef struct InputFile {
     pthread_t thread;           /* thread reading from this file */
     int non_blocking;           /* reading packets from the thread should not block */
     int joined;                 /* the thread has been joined */
+    int thread_queue_size;      /* maximum number of queued packets */
 #endif
 } InputFile;
 
@@ -390,6 +396,7 @@ typedef struct OutputStream {
     AVFrame *filtered_frame;
     AVFrame *last_frame;
     int last_droped;
+    int last_nb0_frames[3];
 
     /* video only */
     AVRational frame_rate;
@@ -430,6 +437,7 @@ typedef struct OutputStream {
     const char *attachment_filename;
     int copy_initial_nonkeyframes;
     int copy_prior_start;
+    char *disposition;
 
     int keep_pix_fmt;
 
@@ -479,6 +487,7 @@ extern float dts_error_threshold;
 extern int audio_volume;
 extern int audio_sync_method;
 extern int video_sync_method;
+extern float frame_drop_threshold;
 extern int do_benchmark;
 extern int do_benchmark_all;
 extern int do_deinterlace;

@@ -16,14 +16,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCOENC_V210ENC_H
-#define AVCOENC_V210ENC_H
+#ifndef AVCODEC_V210ENC_H
+#define AVCODEC_V210ENC_H
 
 #include "libavutil/log.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixfmt.h"
 
-typedef struct {
+typedef struct V210EncContext {
     void (*pack_line_8)(const uint8_t *y, const uint8_t *u,
                         const uint8_t *v, uint8_t *dst, ptrdiff_t width);
     void (*pack_line_10)(const uint16_t *y, const uint16_t *u,
@@ -32,4 +32,4 @@ typedef struct {
 
 void ff_v210enc_init_x86(V210EncContext *s);
 
-#endif /* AVCOENC_V210ENC_H */
+#endif /* AVCODEC_V210ENC_H */

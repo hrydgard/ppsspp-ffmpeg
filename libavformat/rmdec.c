@@ -56,7 +56,7 @@ struct RMStream {
     int32_t deint_id;  ///< deinterleaver used in audio stream
 };
 
-typedef struct {
+typedef struct RMDemuxContext {
     int nb_packets;
     int old_format;
     int current_stream;
@@ -112,6 +112,8 @@ static void rm_read_metadata(AVFormatContext *s, AVIOContext *pb, int wide)
 RMStream *ff_rm_alloc_rmstream (void)
 {
     RMStream *rms = av_mallocz(sizeof(RMStream));
+    if (!rms)
+        return NULL;
     rms->curpic_num = -1;
     return rms;
 }
@@ -318,6 +320,8 @@ int ff_rm_read_mdpr_codecdata(AVFormatContext *s, AVIOContext *pb,
 
     if (codec_data_size > INT_MAX)
         return AVERROR_INVALIDDATA;
+    if (codec_data_size == 0)
+        return 0;
 
     avpriv_set_pts_info(st, 64, 1, 1000);
     codec_pos = avio_tell(pb);
@@ -387,7 +391,7 @@ int ff_rm_read_mdpr_codecdata(AVFormatContext *s, AVIOContext *pb,
         st->codec->codec_tag = avio_rl32(pb);
         st->codec->codec_id  = ff_codec_get_id(ff_rm_codec_tags,
                                                st->codec->codec_tag);
-        av_dlog(s, "%X %X\n", st->codec->codec_tag, MKTAG('R', 'V', '2', '0'));
+        av_log(s, AV_LOG_TRACE, "%X %X\n", st->codec->codec_tag, MKTAG('R', 'V', '2', '0'));
         if (st->codec->codec_id == AV_CODEC_ID_NONE)
             goto fail1;
         st->codec->width  = avio_rb16(pb);
@@ -493,6 +497,8 @@ static int rm_read_header_old(AVFormatContext *s)
     if (!st)
         return -1;
     st->priv_data = ff_rm_alloc_rmstream();
+    if (!st->priv_data)
+        return AVERROR(ENOMEM);
     return rm_read_audio_stream_info(s, s->pb, st, st->priv_data, 1);
 }
 
@@ -526,7 +532,7 @@ static int rm_read_header(AVFormatContext *s)
         tag = avio_rl32(pb);
         tag_size = avio_rb32(pb);
         avio_rb16(pb);
-        av_dlog(s, "tag=%c%c%c%c (%08x) size=%d\n",
+        av_log(s, AV_LOG_TRACE, "tag=%c%c%c%c (%08x) size=%d\n",
                 (tag      ) & 0xff,
                 (tag >>  8) & 0xff,
                 (tag >> 16) & 0xff,
@@ -576,6 +582,8 @@ static int rm_read_header(AVFormatContext *s)
             get_str8(pb, mime, sizeof(mime)); /* mimetype */
             st->codec->codec_type = AVMEDIA_TYPE_DATA;
             st->priv_data = ff_rm_alloc_rmstream();
+            if (!st->priv_data)
+                return AVERROR(ENOMEM);
             if (ff_rm_read_mdpr_codecdata(s, s->pb, st, st->priv_data,
                                           avio_rb32(pb), mime) < 0)
                 goto fail;
@@ -702,7 +710,7 @@ static int rm_assemble_video_frame(AVFormatContext *s, AVIOContext *pb,
                                    int64_t *timestamp)
 {
     int hdr;
-    int seq = 0, pic_num = 0, len2 = 0, pos = 0; //init to silcense compiler warning
+    int seq = 0, pic_num = 0, len2 = 0, pos = 0; //init to silence compiler warning
     int type;
     int ret;
 
@@ -1071,7 +1079,7 @@ static int64_t rm_read_dts(AVFormatContext *s, int stream_index,
         }
 
         if((flags&2) && (seq&0x7F) == 1){
-            av_dlog(s, "%d %d-%d %"PRId64" %d\n",
+            av_log(s, AV_LOG_TRACE, "%d %d-%d %"PRId64" %d\n",
                     flags, stream_index2, stream_index, dts, seq);
             av_add_index_entry(st, pos, dts, 0, 0, AVINDEX_KEYFRAME);
             if(stream_index2 == stream_index)

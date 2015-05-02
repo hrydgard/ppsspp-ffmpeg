@@ -32,12 +32,10 @@
 #include <limits.h>
 
 #include "avcodec.h"
+#include "internal.h"
 #include "mathops.h"
 #include "mpegutils.h"
 #include "mpegvideo.h"
-
-#undef NDEBUG
-#include <assert.h>
 
 #define P_LEFT P[1]
 #define P_TOP P[2]
@@ -320,6 +318,9 @@ int ff_init_me(MpegEncContext *s){
     }
 
     c->avctx= s->avctx;
+
+    if(s->codec_id == AV_CODEC_ID_H261)
+        c->avctx->me_sub_cmp = c->avctx->me_cmp;
 
     if(cache_size < 2*dia_size && !c->stride){
         av_log(s->avctx, AV_LOG_INFO, "ME_MAP size may be a little small for the selected diamond size\n");
@@ -1546,11 +1547,11 @@ void ff_estimate_b_frame_motion(MpegEncContext * s,
     c->skip=0;
     bmin = estimate_motion_b(s, mb_x, mb_y, s->b_back_mv_table, 2, s->b_code) +
            2 * penalty_factor;
-    av_dlog(s, " %d %d ", s->b_forw_mv_table[xy][0], s->b_forw_mv_table[xy][1]);
+    ff_dlog(s, " %d %d ", s->b_forw_mv_table[xy][0], s->b_forw_mv_table[xy][1]);
 
     c->skip=0;
     fbmin= bidir_refine(s, mb_x, mb_y) + penalty_factor;
-    av_dlog(s, "%d %d %d %d\n", dmin, fmin, bmin, fbmin);
+    ff_dlog(s, "%d %d %d %d\n", dmin, fmin, bmin, fbmin);
 
     if(s->flags & CODEC_FLAG_INTERLACED_ME){
 //FIXME mb type penalty

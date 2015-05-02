@@ -197,7 +197,7 @@ static inline int16_t adpcm_ima_wav_expand_nibble(ADPCMChannelStatus *c, GetBitC
     step_index = av_clip(step_index, 0, 88);
 
     sign = nibble & (1 << shift);
-    delta = nibble & ((1 << shift) - 1);
+    delta = av_mod_uintp2(nibble, shift);
     diff = ((2 * delta + 1) * step) >> shift;
     predictor = c->predictor;
     if (sign) predictor -= diff;
@@ -269,7 +269,7 @@ static inline short adpcm_ima_oki_expand_nibble(ADPCMChannelStatus *c, int nibbl
     if (sign) predictor -= diff;
     else predictor += diff;
 
-    c->predictor = av_clip(predictor, -2048, 2047);
+    c->predictor = av_clip_intp2(predictor, 11);
     c->step_index = step_index;
 
     return c->predictor << 4;
@@ -1498,7 +1498,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, void *data,
                         prev = 0;
                     }
 
-                    prev = av_clip((prev + 0x20) >> 6, -0x200000, 0x1fffff);
+                    prev = av_clip_intp2((prev + 0x20) >> 6, 21);
 
                     byte = bytestream2_get_byteu(&gb);
                     if (!channel)

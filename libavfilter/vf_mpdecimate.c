@@ -158,10 +158,10 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_YUVA420P,
         AV_PIX_FMT_NONE
     };
-
-    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
-
-    return 0;
+    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
+    if (!fmts_list)
+        return AVERROR(ENOMEM);
+    return ff_set_common_formats(ctx, fmts_list);
 }
 
 static int config_input(AVFilterLink *inlink)
@@ -188,7 +188,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *cur)
         decimate->ref = cur;
         decimate->drop_count = FFMIN(-1, decimate->drop_count-1);
 
-        if (ret = ff_filter_frame(outlink, av_frame_clone(cur)) < 0)
+        if ((ret = ff_filter_frame(outlink, av_frame_clone(cur))) < 0)
             return ret;
     }
 
