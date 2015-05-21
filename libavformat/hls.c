@@ -62,6 +62,7 @@
 enum KeyType {
     KEY_NONE,
     KEY_AES_128,
+    KEY_SAMPLE_AES
 };
 
 struct segment {
@@ -164,6 +165,7 @@ struct variant {
 };
 
 typedef struct HLSContext {
+    AVClass *class;
     int n_variants;
     struct variant **variants;
     int n_playlists;
@@ -172,6 +174,7 @@ typedef struct HLSContext {
     struct rendition **renditions;
 
     int cur_seq_no;
+    int live_start_index;
     int first_packet;
     int64_t first_timestamp;
     int64_t cur_timestamp;
@@ -329,7 +332,7 @@ static void handle_variant_args(struct variant_info *info, const char *key,
 
 struct key_info {
      char uri[MAX_URL_SIZE];
-     char method[10];
+     char method[11];
      char iv[35];
 };
 
@@ -556,6 +559,8 @@ static int parse_playlist(HLSContext *c, const char *url,
             has_iv = 0;
             if (!strcmp(info.method, "AES-128"))
                 key_type = KEY_AES_128;
+            if (!strcmp(info.method, "SAMPLE-AES"))
+                key_type = KEY_SAMPLE_AES;
             if (!strncmp(info.iv, "0x", 2) || !strncmp(info.iv, "0X", 2)) {
                 ff_hex_to_data(iv, info.iv + 2);
                 has_iv = 1;
@@ -900,6 +905,14 @@ static void intercept_id3(struct playlist *pls, uint8_t *buf,
         pls->is_id3_timestamped = (pls->id3_mpegts_timestamp != AV_NOPTS_VALUE);
 }
 
+static void update_options(char **dest, const char *name, void *src)
+{
+    av_freep(dest);
+    av_opt_get(src, name, 0, (uint8_t**)dest);
+    if (*dest && !strlen(*dest))
+        av_freep(dest);
+}
+
 static int open_input(HLSContext *c, struct playlist *pls)
 {
     AVDictionary *opts = NULL;
@@ -941,6 +954,8 @@ static int open_input(HLSContext *c, struct playlist *pls)
                     av_log(NULL, AV_LOG_ERROR, "Unable to read key file %s\n",
                            seg->key);
                 }
+                update_options(&c->cookies, "cookies", uc->priv_data);
+                av_dict_set(&opts, "cookies", c->cookies, 0);
                 ffurl_close(uc);
             } else {
                 av_log(NULL, AV_LOG_ERROR, "Unable to open key file %s\n",
@@ -967,6 +982,10 @@ static int open_input(HLSContext *c, struct playlist *pls)
             goto cleanup;
         }
         ret = 0;
+    } else if (seg->key_type == KEY_SAMPLE_AES) {
+        av_log(pls->parent, AV_LOG_ERROR,
+               "SAMPLE-AES encryption is not supported yet\n");
+        ret = AVERROR_PATCHWELCOME;
     }
     else
       ret = AVERROR(ENOSYS);
@@ -1068,7 +1087,8 @@ reload:
         if (ret < 0) {
             av_log(v->parent, AV_LOG_WARNING, "Failed to open segment of playlist %d\n",
                    v->index);
-            return ret;
+            v->cur_seq_no += 1;
+            goto reload;
         }
         just_opened = 1;
     }
@@ -1220,10 +1240,12 @@ static int select_cur_seq_no(HLSContext *c, struct playlist *pls)
              * require us to download a segment to inspect its timestamps. */
             return c->cur_seq_no;
 
-        /* If this is a live stream with more than 3 segments, start at the
-         * third last segment. */
-        if (pls->n_segments > 3)
-            return pls->start_seq_no + pls->n_segments - 3;
+        /* If this is a live stream, start live_start_index segments from the
+         * start or end */
+        if (c->live_start_index < 0)
+            return pls->start_seq_no + FFMAX(pls->n_segments + c->live_start_index, 0);
+        else
+            return pls->start_seq_no + FFMIN(c->live_start_index, pls->n_segments - 1);
     }
 
     /* Otherwise just start on the first segment. */
@@ -1245,22 +1267,13 @@ static int hls_read_header(AVFormatContext *s)
     // if the URL context is good, read important options we must broker later
     if (u && u->prot->priv_data_class) {
         // get the previous user agent & set back to null if string size is zero
-        av_freep(&c->user_agent);
-        av_opt_get(u->priv_data, "user-agent", 0, (uint8_t**)&(c->user_agent));
-        if (c->user_agent && !strlen(c->user_agent))
-            av_freep(&c->user_agent);
+        update_options(&c->user_agent, "user-agent", u->priv_data);
 
         // get the previous cookies & set back to null if string size is zero
-        av_freep(&c->cookies);
-        av_opt_get(u->priv_data, "cookies", 0, (uint8_t**)&(c->cookies));
-        if (c->cookies && !strlen(c->cookies))
-            av_freep(&c->cookies);
+        update_options(&c->cookies, "cookies", u->priv_data);
 
         // get the previous headers & set back to null if string size is zero
-        av_freep(&c->headers);
-        av_opt_get(u->priv_data, "headers", 0, (uint8_t**)&(c->headers));
-        if (c->headers && !strlen(c->headers))
-            av_freep(&c->headers);
+        update_options(&c->headers, "headers", u->priv_data);
     }
 
     if ((ret = parse_playlist(c, s->filename, NULL, s->pb)) < 0)
@@ -1313,13 +1326,13 @@ static int hls_read_header(AVFormatContext *s)
         struct playlist *pls = c->playlists[i];
         AVInputFormat *in_fmt = NULL;
 
-        if (pls->n_segments == 0)
-            continue;
-
         if (!(pls->ctx = avformat_alloc_context())) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
+
+        if (pls->n_segments == 0)
+            continue;
 
         pls->index  = i;
         pls->needed = 1;
@@ -1706,9 +1719,25 @@ static int hls_probe(AVProbeData *p)
     return 0;
 }
 
+#define OFFSET(x) offsetof(HLSContext, x)
+#define FLAGS AV_OPT_FLAG_DECODING_PARAM
+static const AVOption hls_options[] = {
+    {"live_start_index", "segment index to start live streams at (negative values are from the end)",
+        OFFSET(live_start_index), FF_OPT_TYPE_INT, {.i64 = -3}, INT_MIN, INT_MAX, FLAGS},
+    {NULL}
+};
+
+static const AVClass hls_class = {
+    .class_name = "hls,applehttp",
+    .item_name  = av_default_item_name,
+    .option     = hls_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 AVInputFormat ff_hls_demuxer = {
     .name           = "hls,applehttp",
     .long_name      = NULL_IF_CONFIG_SMALL("Apple HTTP Live Streaming"),
+    .priv_class     = &hls_class,
     .priv_data_size = sizeof(HLSContext),
     .read_probe     = hls_probe,
     .read_header    = hls_read_header,

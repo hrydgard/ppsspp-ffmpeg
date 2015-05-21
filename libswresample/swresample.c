@@ -86,10 +86,10 @@ struct SwrContext *swr_alloc_set_opts(struct SwrContext *s,
     if (av_opt_set_int(s, "tsf", AV_SAMPLE_FMT_NONE,   0) < 0)
         goto fail;
 
-    if (av_opt_set_int(s, "ich", av_get_channel_layout_nb_channels(s-> in_ch_layout), 0) < 0)
+    if (av_opt_set_int(s, "ich", av_get_channel_layout_nb_channels(s-> user_in_ch_layout), 0) < 0)
         goto fail;
 
-    if (av_opt_set_int(s, "och", av_get_channel_layout_nb_channels(s->out_ch_layout), 0) < 0)
+    if (av_opt_set_int(s, "och", av_get_channel_layout_nb_channels(s->user_out_ch_layout), 0) < 0)
         goto fail;
 
     av_opt_set_int(s, "uch", 0, 0);
@@ -152,6 +152,7 @@ av_cold void swr_close(SwrContext *s){
 
 av_cold int swr_init(struct SwrContext *s){
     int ret;
+    char l1[1024], l2[1024];
 
     clear_context(s);
 
@@ -163,6 +164,13 @@ av_cold int swr_init(struct SwrContext *s){
         av_log(s, AV_LOG_ERROR, "Requested output sample format %d is invalid\n", s->out_sample_fmt);
         return AVERROR(EINVAL);
     }
+
+    s->out.ch_count  = s-> user_out_ch_count;
+    s-> in.ch_count  = s->  user_in_ch_count;
+    s->used_ch_count = s->user_used_ch_count;
+
+    s-> in_ch_layout = s-> user_in_ch_layout;
+    s->out_ch_layout = s->user_out_ch_layout;
 
     if(av_get_channel_layout_nb_channels(s-> in_ch_layout) > SWR_CH_MAX) {
         av_log(s, AV_LOG_WARNING, "Input channel layout 0x%"PRIx64" is invalid or unsupported.\n", s-> in_ch_layout);
@@ -176,8 +184,7 @@ av_cold int swr_init(struct SwrContext *s){
 
     switch(s->engine){
 #if CONFIG_LIBSOXR
-        extern struct Resampler const soxr_resampler;
-        case SWR_ENGINE_SOXR: s->resampler = &soxr_resampler; break;
+        case SWR_ENGINE_SOXR: s->resampler = &swri_soxr_resampler; break;
 #endif
         case SWR_ENGINE_SWR : s->resampler = &swri_resampler; break;
         default:
@@ -271,10 +278,18 @@ av_cold int swr_init(struct SwrContext *s){
         return -1;
     }
 
+    av_get_channel_layout_string(l1, sizeof(l1), s-> in.ch_count, s-> in_ch_layout);
+    av_get_channel_layout_string(l2, sizeof(l2), s->out.ch_count, s->out_ch_layout);
+    if (s->out_ch_layout && s->out.ch_count != av_get_channel_layout_nb_channels(s->out_ch_layout)) {
+        av_log(s, AV_LOG_ERROR, "Output channel layout %s mismatches specified channel count %d\n", l2, s->out.ch_count);
+        return AVERROR(EINVAL);
+    }
+    if (s->in_ch_layout && s->used_ch_count != av_get_channel_layout_nb_channels(s->in_ch_layout)) {
+        av_log(s, AV_LOG_ERROR, "Input channel layout %s mismatches specified channel count %d\n", l1, s->used_ch_count);
+        return AVERROR(EINVAL);
+    }
+
     if ((!s->out_ch_layout || !s->in_ch_layout) && s->used_ch_count != s->out.ch_count && !s->rematrix_custom) {
-        char l1[1024], l2[1024];
-        av_get_channel_layout_string(l1, sizeof(l1), s-> in.ch_count, s-> in_ch_layout);
-        av_get_channel_layout_string(l2, sizeof(l2), s->out.ch_count, s->out_ch_layout);
         av_log(s, AV_LOG_ERROR, "Rematrix is needed between %s and %s "
                "but there is not enough information to do it\n", l1, l2);
         return -1;
@@ -353,7 +368,7 @@ int swri_realloc_audio(AudioData *a, int count){
     av_assert0(a->bps);
     av_assert0(a->ch_count);
 
-    a->data= av_mallocz(countb*a->ch_count);
+    a->data= av_mallocz_array(countb, a->ch_count);
     if(!a->data)
         return AVERROR(ENOMEM);
     for(i=0; i<a->ch_count; i++){

@@ -72,6 +72,9 @@ static av_cold int atrac3p_decode_close(AVCodecContext *avctx)
     av_freep(&ctx->ch_units);
     av_freep(&ctx->fdsp);
 
+    ff_mdct_end(&ctx->mdct_ctx);
+    ff_mdct_end(&ctx->ipqf_dct_ctx);
+
     return 0;
 }
 
@@ -333,10 +336,8 @@ static int atrac3p_decode_frame(AVCodecContext *avctx, void *data,
     float **samples_p = (float **)frame->extended_data;
 
     frame->nb_samples = ATRAC3P_FRAME_SAMPLES;
-    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
-    }
 
     if ((ret = init_get_bits8(&ctx->gb, avpkt->data, avpkt->size)) < 0)
         return ret;

@@ -18,6 +18,10 @@ fate-vsynth%-asv1:               ENCOPTS = -qscale 10
 FATE_VCODEC-$(call ENCDEC, ASV2, AVI)   += asv2
 fate-vsynth%-asv2:               ENCOPTS = -qscale 10
 
+FATE_VCODEC-$(call ENCDEC, CINEPAK, MOV) += cinepak
+fate-vsynth%-cinepak:            ENCOPTS  = -vcodec cinepak -frames 3
+fate-vsynth%-cinepak:            FMT      = mov
+
 FATE_VCODEC-$(call ENCDEC, CLJR, AVI)   += cljr
 fate-vsynth%-cljr:               ENCOPTS = -strict -1
 
@@ -37,10 +41,15 @@ fate-vsynth%-dnxhd-720p-10bit:   ENCOPTS = -s hd720 -b 90M              \
                                            -pix_fmt yuv422p10 -frames 5 -qmax 8
 fate-vsynth%-dnxhd-720p-10bit:   FMT     = dnxhd
 
-FATE_VCODEC-$(call ENCDEC, DNXHD, MOV)  += dnxhd-1080i
+FATE_VCODEC-$(call ENCDEC, DNXHD, MOV)  += dnxhd-1080i dnxhd-1080i-colr
 fate-vsynth%-dnxhd-1080i:        ENCOPTS = -s hd1080 -b 120M -flags +ildct \
                                            -pix_fmt yuv422p -frames 5 -qmax 8
 fate-vsynth%-dnxhd-1080i:        FMT     = mov
+
+fate-vsynth%-dnxhd-1080i-colr:   ENCOPTS = -s hd1080 -b 120M -flags +ildct -movflags write_colr \
+                                           -pix_fmt yuv422p -frames 5 -qmax 8
+fate-vsynth%-dnxhd-1080i-colr:   DECOPTS = -sws_flags area+accurate_rnd+bitexact
+fate-vsynth%-dnxhd-1080i-colr:   FMT     = mov
 
 FATE_VCODEC-$(call ENCDEC, DVVIDEO, DV) += dv dv-411 dv-50
 fate-vsynth%-dv:                 CODEC   = dvvideo
@@ -113,10 +122,11 @@ fate-vsynth%-jpeg2000-97:             DECINOPTS = -vcodec jpeg2000
 FATE_VCODEC-$(call ENCDEC, LJPEG MJPEG, AVI) += ljpeg
 fate-vsynth%-ljpeg:              ENCOPTS = -strict -1
 
-FATE_VCODEC-$(call ENCDEC, MJPEG, AVI)  += mjpeg mjpeg-422 mjpeg-444
+FATE_VCODEC-$(call ENCDEC, MJPEG, AVI)  += mjpeg mjpeg-422 mjpeg-444 mjpeg-trell
 fate-vsynth%-mjpeg:              ENCOPTS = -qscale 9 -pix_fmt yuvj420p
 fate-vsynth%-mjpeg-422:          ENCOPTS = -qscale 9 -pix_fmt yuvj422p
 fate-vsynth%-mjpeg-444:          ENCOPTS = -qscale 9 -pix_fmt yuvj444p
+fate-vsynth%-mjpeg-trell:        ENCOPTS = -qscale 9 -pix_fmt yuvj420p -trellis 1
 
 FATE_VCODEC-$(call ENCDEC, MPEG1VIDEO, MPEG1VIDEO MPEGVIDEO) += mpeg1 mpeg1b
 fate-vsynth%-mpeg1:              FMT     = mpeg1video
@@ -314,7 +324,7 @@ FATE_VSYNTH_LENA = $(FATE_VCODEC:%=fate-vsynth_lena-%)
 RESIZE_OFF   = dnxhd-720p dnxhd-720p-rd dnxhd-720p-10bit dnxhd-1080i \
                dv dv-411 dv-50 avui snow snow-hpel snow-ll
 # Incorrect parameters - usually size or color format restrictions
-INC_PAR_OFF  = h261 h261-trellis h263 h263p h263-obmc msvideo1 \
+INC_PAR_OFF  = cinepak h261 h261-trellis h263 h263p h263-obmc msvideo1 \
                roqvideo rv10 rv20 y41p qtrlegray
 VSYNTH3_OFF  = $(RESIZE_OFF) $(INC_PAR_OFF)
 

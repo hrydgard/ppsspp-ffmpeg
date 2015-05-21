@@ -44,9 +44,6 @@
 #include "network.h"
 #endif
 
-#undef NDEBUG
-#include <assert.h>
-
 /**
  * @file
  * muxing functions for use within libavformat
@@ -445,7 +442,8 @@ static int compute_pkt_fields2(AVFormatContext *s, AVStream *st, AVPacket *pkt)
     int num, den, i;
     int frame_size;
 
-    av_dlog(s, "compute_pkt_fields2: pts:%s dts:%s cur_dts:%s b:%d size:%d st:%d\n",
+    if (s->debug & FF_FDEBUG_TS)
+        av_log(s, AV_LOG_TRACE, "compute_pkt_fields2: pts:%s dts:%s cur_dts:%s b:%d size:%d st:%d\n",
             av_ts2str(pkt->pts), av_ts2str(pkt->dts), av_ts2str(st->cur_dts), delay, pkt->size, pkt->stream_index);
 
     if (pkt->duration < 0 && st->codec->codec_type != AVMEDIA_TYPE_SUBTITLE) {
@@ -505,8 +503,10 @@ static int compute_pkt_fields2(AVFormatContext *s, AVStream *st, AVPacket *pkt)
         return AVERROR(EINVAL);
     }
 
-    av_dlog(s, "av_write_frame: pts2:%s dts2:%s\n",
+    if (s->debug & FF_FDEBUG_TS)
+        av_log(s, AV_LOG_TRACE, "av_write_frame: pts2:%s dts2:%s\n",
             av_ts2str(pkt->pts), av_ts2str(pkt->dts));
+
     st->cur_dts = pkt->dts;
     st->pts.val = pkt->dts;
 
@@ -558,16 +558,16 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
         AVStream *st = s->streams[pkt->stream_index];
         int64_t offset = st->mux_ts_offset;
 
-        if (s->offset == AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE &&
+        if (s->internal->offset == AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE &&
             (pkt->dts < 0 || s->avoid_negative_ts == AVFMT_AVOID_NEG_TS_MAKE_ZERO)) {
-            s->offset = -pkt->dts;
-            s->offset_timebase = st->time_base;
+            s->internal->offset = -pkt->dts;
+            s->internal->offset_timebase = st->time_base;
         }
 
-        if (s->offset != AV_NOPTS_VALUE && !offset) {
+        if (s->internal->offset != AV_NOPTS_VALUE && !offset) {
             offset = st->mux_ts_offset =
-                av_rescale_q_rnd(s->offset,
-                                 s->offset_timebase,
+                av_rescale_q_rnd(s->internal->offset,
+                                 s->internal->offset_timebase,
                                  st->time_base,
                                  AV_ROUND_UP);
         }
@@ -697,7 +697,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     if (s->streams[pkt->stream_index]->last_in_packet_buffer) {
         next_point = &(st->last_in_packet_buffer->next);
     } else {
-        next_point = &s->packet_buffer;
+        next_point = &s->internal->packet_buffer;
     }
 
     if (chunked) {
@@ -721,7 +721,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         if (chunked && !(this_pktl->pkt.flags & CHUNK_START))
             goto next_non_null;
 
-        if (compare(s, &s->packet_buffer_end->pkt, pkt)) {
+        if (compare(s, &s->internal->packet_buffer_end->pkt, pkt)) {
             while (   *next_point
                    && ((chunked && !((*next_point)->pkt.flags&CHUNK_START))
                        || !compare(s, &(*next_point)->pkt, pkt)))
@@ -729,12 +729,12 @@ FF_ENABLE_DEPRECATION_WARNINGS
             if (*next_point)
                 goto next_non_null;
         } else {
-            next_point = &(s->packet_buffer_end->next);
+            next_point = &(s->internal->packet_buffer_end->next);
         }
     }
     av_assert1(!*next_point);
 
-    s->packet_buffer_end = this_pktl;
+    s->internal->packet_buffer_end = this_pktl;
 next_non_null:
 
     this_pktl->next = *next_point;
@@ -795,11 +795,11 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
         flush = 1;
 
     if (s->max_interleave_delta > 0 &&
-        s->packet_buffer &&
+        s->internal->packet_buffer &&
         !flush &&
         s->internal->nb_interleaved_streams == stream_count+noninterleaved_count
     ) {
-        AVPacket *top_pkt = &s->packet_buffer->pkt;
+        AVPacket *top_pkt = &s->internal->packet_buffer->pkt;
         int64_t delta_dts = INT64_MIN;
         int64_t top_dts = av_rescale_q(top_pkt->dts,
                                        s->streams[top_pkt->stream_index]->time_base,
@@ -829,13 +829,13 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
 
     if (stream_count && flush) {
         AVStream *st;
-        pktl = s->packet_buffer;
+        pktl = s->internal->packet_buffer;
         *out = pktl->pkt;
         st   = s->streams[out->stream_index];
 
-        s->packet_buffer = pktl->next;
-        if (!s->packet_buffer)
-            s->packet_buffer_end = NULL;
+        s->internal->packet_buffer = pktl->next;
+        if (!s->internal->packet_buffer)
+            s->internal->packet_buffer_end = NULL;
 
         if (st->last_in_packet_buffer == pktl)
             st->last_in_packet_buffer = NULL;
@@ -879,8 +879,10 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt)
     if (pkt) {
         AVStream *st = s->streams[pkt->stream_index];
 
-        av_dlog(s, "av_interleaved_write_frame size:%d dts:%s pts:%s\n",
+        if (s->debug & FF_FDEBUG_TS)
+            av_log(s, AV_LOG_TRACE, "av_interleaved_write_frame size:%d dts:%s pts:%s\n",
                 pkt->size, av_ts2str(pkt->dts), av_ts2str(pkt->pts));
+
         if ((ret = compute_pkt_fields2(s, st, pkt)) < 0 && !(s->oformat->flags & AVFMT_NOTIMESTAMPS))
             goto fail;
 
@@ -889,7 +891,7 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt)
             goto fail;
         }
     } else {
-        av_dlog(s, "av_interleaved_write_frame FLUSH\n");
+        av_log(s, AV_LOG_TRACE, "av_interleaved_write_frame FLUSH\n");
         flush = 1;
     }
 

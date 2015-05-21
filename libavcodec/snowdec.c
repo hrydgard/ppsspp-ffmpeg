@@ -90,13 +90,15 @@ static av_always_inline void predict_slice_buffered(SnowContext *s, slice_buffer
 
     if(s->avmv && mb_y < mb_h && plane_index == 0)
         for(mb_x=0; mb_x<mb_w; mb_x++){
-            AVMotionVector *avmv = s->avmv + (s->avmv_index++);
+            AVMotionVector *avmv = s->avmv + s->avmv_index;
             const int b_width = s->b_width  << s->block_max_depth;
             const int b_stride= b_width;
             BlockNode *bn= &s->block[mb_x + mb_y*b_stride];
 
             if (bn->type)
                 continue;
+
+            s->avmv_index++;
 
             avmv->w = block_w;
             avmv->h = block_h;
@@ -172,7 +174,7 @@ static int decode_q_branch(SnowContext *s, int level, int x, int y){
         int l = left->color[0];
         int cb= left->color[1];
         int cr= left->color[2];
-        int ref = 0;
+        unsigned ref = 0;
         int ref_context= av_log2(2*left->ref) + av_log2(2*top->ref);
         int mx_context= av_log2(2*FFABS(left->mx - top->mx)) + 0*av_log2(2*FFABS(tr->mx - top->mx));
         int my_context= av_log2(2*FFABS(left->my - top->my)) + 0*av_log2(2*FFABS(tr->my - top->my));
@@ -399,7 +401,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
     int ret;
 
     if ((ret = ff_snow_common_init(avctx)) < 0) {
-        ff_snow_common_end(avctx->priv_data);
         return ret;
     }
 
@@ -642,4 +643,6 @@ AVCodec ff_snow_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1 /*| CODEC_CAP_DRAW_HORIZ_BAND*/,
+    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE |
+                      FF_CODEC_CAP_INIT_CLEANUP,
 };

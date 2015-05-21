@@ -845,6 +845,7 @@ int opt_loglevel(void *optctx, const char *opt, const char *arg)
         { "info"   , AV_LOG_INFO    },
         { "verbose", AV_LOG_VERBOSE },
         { "debug"  , AV_LOG_DEBUG   },
+        { "trace"  , AV_LOG_TRACE   },
     };
     char *tail;
     int level;
@@ -1081,8 +1082,7 @@ static void print_program_info(int flags, int level)
         av_log(NULL, level, " Copyright (c) %d-%d the FFmpeg developers",
                program_birth_year, CONFIG_THIS_YEAR);
     av_log(NULL, level, "\n");
-    av_log(NULL, level, "%sbuilt on %s %s with %s\n",
-           indent, __DATE__, __TIME__, CC_IDENT);
+    av_log(NULL, level, "%sbuilt with %s\n", indent, CC_IDENT);
 
     av_log(NULL, level, "%sconfiguration: " FFMPEG_CONFIGURATION "\n", indent);
 }
@@ -1536,10 +1536,10 @@ int show_protocols(void *optctx, const char *opt, const char *arg)
     printf("Supported file protocols:\n"
            "Input:\n");
     while ((name = avio_enum_protocols(&opaque, 0)))
-        printf("%s\n", name);
+        printf("  %s\n", name);
     printf("Output:\n");
     while ((name = avio_enum_protocols(&opaque, 1)))
-        printf("%s\n", name);
+        printf("  %s\n", name);
     return 0;
 }
 
@@ -1554,7 +1554,7 @@ int show_filters(void *optctx, const char *opt, const char *arg)
     printf("Filters:\n"
            "  T.. = Timeline support\n"
            "  .S. = Slice threading\n"
-           "  ..C = Commmand support\n"
+           "  ..C = Command support\n"
            "  A = Audio input/output\n"
            "  V = Video input/output\n"
            "  N = Dynamic number and/or type of input/output\n"
@@ -1913,7 +1913,8 @@ int cmdutils_read_file(const char *filename, char **bufptr, size_t *size)
     }
 
 out:
-    av_log(NULL, AV_LOG_ERROR, "IO error: %s\n", av_err2str(ret));
+    if (ret < 0)
+        av_log(NULL, AV_LOG_ERROR, "IO error: %s\n", av_err2str(ret));
     fclose(f);
     return ret;
 }

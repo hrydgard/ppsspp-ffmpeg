@@ -86,6 +86,7 @@ float dts_error_threshold   = 3600*30;
 int audio_volume      = 256;
 int audio_sync_method = 0;
 int video_sync_method = VSYNC_AUTO;
+float frame_drop_threshold = 0;
 int do_deinterlace    = 0;
 int do_benchmark      = 0;
 int do_benchmark_all  = 0;
@@ -109,6 +110,7 @@ static int no_file_overwrite  = 0;
 static int do_psnr            = 0;
 static int input_sync;
 static int override_ffserver  = 0;
+static int input_stream_potentially_available = 0;
 
 static void uninit_options(OptionsContext *o)
 {
@@ -519,7 +521,7 @@ static int opt_recording_timestamp(void *optctx, const char *opt, const char *ar
     char buf[128];
     int64_t recording_timestamp = parse_time_or_die(opt, arg, 0) / 1E6;
     struct tm time = *gmtime((time_t*)&recording_timestamp);
-    if (!strftime(buf, sizeof(buf), "creation_time=%FT%T%z", &time))
+    if (!strftime(buf, sizeof(buf), "creation_time=%Y-%m-%dT%H:%M:%S%z", &time))
         return -1;
     parse_option(o, "metadata", buf, options);
 
@@ -858,6 +860,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
     MATCH_PER_TYPE_OPT(codec_names, str,    video_codec_name, ic, "v");
     MATCH_PER_TYPE_OPT(codec_names, str,    audio_codec_name, ic, "a");
     MATCH_PER_TYPE_OPT(codec_names, str, subtitle_codec_name, ic, "s");
+    MATCH_PER_TYPE_OPT(codec_names, str,     data_codec_name, ic, "d");
 
     ic->video_codec_id   = video_codec_name ?
         find_codec_or_die(video_codec_name   , AVMEDIA_TYPE_VIDEO   , 0)->id : AV_CODEC_ID_NONE;
@@ -916,7 +919,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
 
     timestamp = (o->start_time == AV_NOPTS_VALUE) ? 0 : o->start_time;
     /* add the stream start time */
-    if (ic->start_time != AV_NOPTS_VALUE)
+    if (!o->seek_timestamp && ic->start_time != AV_NOPTS_VALUE)
         timestamp += ic->start_time;
 
     /* if seeking requested, we execute it */
@@ -949,6 +952,9 @@ static int open_input_file(OptionsContext *o, const char *filename)
     f->nb_streams = ic->nb_streams;
     f->rate_emu   = o->rate_emu;
     f->accurate_seek = o->accurate_seek;
+#if HAVE_PTHREADS
+    f->thread_queue_size = o->thread_queue_size > 0 ? o->thread_queue_size : 8;
+#endif
 
     /* check if all codec options have been used */
     unused_opts = strip_specifiers(o->g->codec_opts);
@@ -1002,6 +1008,8 @@ static int open_input_file(OptionsContext *o, const char *filename)
     for (i = 0; i < orig_nb_streams; i++)
         av_dict_free(&opts[i]);
     av_freep(&opts);
+
+    input_stream_potentially_available = 1;
 
     return 0;
 }
@@ -1185,6 +1193,9 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
         ost->enc_ctx->flags |= CODEC_FLAG_QSCALE;
         ost->enc_ctx->global_quality = FF_QP2LAMBDA * qscale;
     }
+
+    MATCH_PER_STREAM_OPT(disposition, str, ost->disposition, oc, st);
+    ost->disposition = av_strdup(ost->disposition);
 
     if (oc->oformat->flags & AVFMT_GLOBALHEADER)
         ost->enc_ctx->flags |= CODEC_FLAG_GLOBAL_HEADER;
@@ -1389,8 +1400,10 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc, in
             video_enc->rc_override =
                 av_realloc_array(video_enc->rc_override,
                                  i + 1, sizeof(RcOverride));
-            if (!video_enc->rc_override)
+            if (!video_enc->rc_override) {
+                av_log(NULL, AV_LOG_FATAL, "Could not (re)allocate memory for rc_override.\n");
                 exit_program(1);
+            }
             video_enc->rc_override[i].start_frame = start;
             video_enc->rc_override[i].end_frame   = end;
             if (q > 0) {
@@ -1931,7 +1944,15 @@ static int open_output_file(OptionsContext *o, const char *filename)
                     }
                 }
         }
-        /* do something with data? */
+        /* Data only if codec id match */
+        if (!o->data_disable ) {
+            enum AVCodecID codec_id = av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_DATA);
+            for (i = 0; codec_id != AV_CODEC_ID_NONE && i < nb_input_streams; i++) {
+                if (input_streams[i]->st->codec->codec_type == AVMEDIA_TYPE_DATA
+                    && input_streams[i]->st->codec->codec_id == codec_id )
+                    new_data_stream(o, oc, i);
+            }
+        }
     } else {
         for (i = 0; i < o->nb_stream_maps; i++) {
             StreamMap *map = &o->stream_maps[i];
@@ -2017,8 +2038,8 @@ loop_end:
         ost->stream_copy               = 0;
         ost->attachment_filename       = o->attachments[i];
         ost->finished                  = 1;
-        ost->enc_ctx->extradata      = attachment;
-        ost->enc_ctx->extradata_size = len;
+        ost->st->codec->extradata      = attachment;
+        ost->st->codec->extradata_size = len;
 
         p = strrchr(o->attachments[i], '/');
         av_dict_set(&ost->st->metadata, "filename", (p && *p) ? p + 1 : o->attachments[i], AV_DICT_DONT_OVERWRITE);
@@ -2084,6 +2105,12 @@ loop_end:
             print_error(oc->filename, AVERROR(EINVAL));
             exit_program(1);
         }
+    }
+
+    if (!(oc->oformat->flags & AVFMT_NOSTREAMS) && !input_stream_potentially_available) {
+        av_log(NULL, AV_LOG_ERROR,
+               "No input streams but output needs an input stream\n");
+        exit_program(1);
     }
 
     if (!(oc->oformat->flags & AVFMT_NOFILE)) {
@@ -2590,6 +2617,9 @@ static int opt_filter_complex(void *optctx, const char *opt, const char *arg)
     filtergraphs[nb_filtergraphs - 1]->graph_desc = av_strdup(arg);
     if (!filtergraphs[nb_filtergraphs - 1]->graph_desc)
         return AVERROR(ENOMEM);
+
+    input_stream_potentially_available = 1;
+
     return 0;
 }
 
@@ -2604,6 +2634,9 @@ static int opt_filter_complex_script(void *optctx, const char *opt, const char *
         return AVERROR(ENOMEM);
     filtergraphs[nb_filtergraphs - 1]->index      = nb_filtergraphs - 1;
     filtergraphs[nb_filtergraphs - 1]->graph_desc = graph_desc;
+
+    input_stream_potentially_available = 1;
+
     return 0;
 }
 
@@ -2832,6 +2865,9 @@ const OptionDef options[] = {
     { "ss",             HAS_ARG | OPT_TIME | OPT_OFFSET |
                         OPT_INPUT | OPT_OUTPUT,                      { .off = OFFSET(start_time) },
         "set the start time offset", "time_off" },
+    { "seek_timestamp", HAS_ARG | OPT_INT | OPT_OFFSET |
+                        OPT_INPUT,                                   { .off = OFFSET(seek_timestamp) },
+        "enable/disable seeking by timestamp with -ss" },
     { "accurate_seek",  OPT_BOOL | OPT_OFFSET | OPT_EXPERT |
                         OPT_INPUT,                                   { .off = OFFSET(accurate_seek) },
         "enable/disable accurate seeking with -ss" },
@@ -2870,6 +2906,8 @@ const OptionDef options[] = {
         " \"dv\", \"dv50\", \"pal-vcd\", \"ntsc-svcd\", ...)", "type" },
     { "vsync",          HAS_ARG | OPT_EXPERT,                        { opt_vsync },
         "video sync method", "" },
+    { "frame_drop_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT,      { &frame_drop_threshold },
+        "frame drop threshold", "" },
     { "async",          HAS_ARG | OPT_INT | OPT_EXPERT,              { &audio_sync_method },
         "audio sync method", "" },
     { "adrift_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT,          { &audio_drift_threshold },
@@ -2937,6 +2975,12 @@ const OptionDef options[] = {
     { "discard",        OPT_STRING | HAS_ARG | OPT_SPEC |
                         OPT_INPUT,                                   { .off = OFFSET(discard) },
         "discard", "" },
+    { "disposition",    OPT_STRING | HAS_ARG | OPT_SPEC |
+                        OPT_OUTPUT,                                  { .off = OFFSET(disposition) },
+        "disposition", "" },
+    { "thread_queue_size", HAS_ARG | OPT_INT | OPT_OFFSET | OPT_EXPERT | OPT_INPUT,
+                                                                     { .off = OFFSET(thread_queue_size) },
+        "set the maximum number of queued packets from the demuxer" },
 
     /* video options */
     { "vframes",      OPT_VIDEO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_video_frames },
@@ -2999,7 +3043,7 @@ const OptionDef options[] = {
                       OPT_INPUT | OPT_OUTPUT,                                    { .off = OFFSET(top_field_first) },
         "top=1/bottom=0/auto=-1 field first", "" },
     { "vtag",         OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_PERFILE |
-                      OPT_OUTPUT,                                                { .func_arg = opt_old2new },
+                      OPT_INPUT | OPT_OUTPUT,                                    { .func_arg = opt_old2new },
         "force video tag/fourcc", "fourcc/tag" },
     { "qphist",       OPT_VIDEO | OPT_BOOL | OPT_EXPERT ,                        { &qp_hist },
         "show QP histogram" },

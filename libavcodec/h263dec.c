@@ -117,8 +117,9 @@ av_cold int ff_h263_decode_init(AVCodecContext *avctx)
     }
     s->codec_id    = avctx->codec->id;
 
-    if (avctx->stream_codec_tag == AV_RL32("l263") && avctx->extradata_size == 56 && avctx->extradata[0] == 1)
-        s->ehc_mode = 1;
+    if (avctx->codec_tag == AV_RL32("L263") || avctx->codec_tag == AV_RL32("S263"))
+        if (avctx->extradata_size == 56 && avctx->extradata[0] == 1)
+            s->ehc_mode = 1;
 
     /* for h263, we allocate the images after having read the header */
     if (avctx->codec->id != AV_CODEC_ID_H263 &&
@@ -240,10 +241,10 @@ static int decode_slice(MpegEncContext *s)
 
             s->mv_dir  = MV_DIR_FORWARD;
             s->mv_type = MV_TYPE_16X16;
-            av_dlog(s, "%d %d %06X\n",
+            ff_dlog(s, "%d %d %06X\n",
                     ret, get_bits_count(&s->gb), show_bits(&s->gb, 24));
 
-            tprintf(NULL, "Decoding MB at %dx%d\n", s->mb_x, s->mb_y);
+            ff_tlog(NULL, "Decoding MB at %dx%d\n", s->mb_x, s->mb_y);
             ret = s->decode_mb(s, s->block);
 
             if (s->pict_type != AV_PICTURE_TYPE_B)
@@ -458,7 +459,7 @@ retry:
         }
     }
 
-    if (s->bitstream_buffer_size && (s->divx_packed || buf_size < 20)) // divx 5.01+/xvid frame reorder
+    if (s->bitstream_buffer_size && (s->divx_packed || buf_size <= MAX_NVOP_SIZE)) // divx 5.01+/xvid frame reorder
         ret = init_get_bits8(&s->gb, s->bitstream_buffer,
                              s->bitstream_buffer_size);
     else
@@ -559,7 +560,7 @@ retry:
     if (s->codec_id == AV_CODEC_ID_H263  ||
         s->codec_id == AV_CODEC_ID_H263P ||
         s->codec_id == AV_CODEC_ID_H263I)
-        s->gob_index = ff_h263_get_gob_height(s);
+        s->gob_index = H263_GOB_HEIGHT(s->height);
 
     // for skipping the frame
     s->current_picture.f->pict_type = s->pict_type;

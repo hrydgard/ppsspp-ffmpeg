@@ -307,9 +307,17 @@ typedef struct SwsContext {
      * sequential steps, this is for example used to limit the maximum
      * downscaling factor that needs to be supported in one scaler.
      */
-    struct SwsContext *cascaded_context[2];
+    struct SwsContext *cascaded_context[3];
     int cascaded_tmpStride[4];
     uint8_t *cascaded_tmp[4];
+    int cascaded1_tmpStride[4];
+    uint8_t *cascaded1_tmp[4];
+
+    double gamma_value;
+    int gamma_flag;
+    int is_internal_gamma;
+    uint16_t *gamma;
+    uint16_t *inv_gamma;
 
     uint32_t pal_yuv[256];
     uint32_t pal_rgb[256];
@@ -613,7 +621,7 @@ int ff_yuv2rgb_c_init_tables(SwsContext *c, const int inv_table[4],
 void ff_yuv2rgb_init_tables_ppc(SwsContext *c, const int inv_table[4],
                                 int brightness, int contrast, int saturation);
 
-void updateMMXDitherTables(SwsContext *c, int dstY, int lumBufIndex, int chrBufIndex,
+void ff_updateMMXDitherTables(SwsContext *c, int dstY, int lumBufIndex, int chrBufIndex,
                            int lastInLumBuf, int lastInChrBuf);
 
 av_cold void ff_sws_init_range_convert(SwsContext *c);

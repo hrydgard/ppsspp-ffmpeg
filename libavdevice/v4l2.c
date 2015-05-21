@@ -285,9 +285,9 @@ static void list_formats(AVFormatContext *ctx, int type)
                    vfd.description);
         } else if (vfd.flags & V4L2_FMT_FLAG_COMPRESSED &&
                    type & V4L_COMPFORMATS) {
-            AVCodec *codec = avcodec_find_decoder(codec_id);
-            av_log(ctx, AV_LOG_INFO, "Compressed: %9s : %20s :",
-                   codec ? codec->name : "Unsupported",
+            const AVCodecDescriptor *desc = avcodec_descriptor_get(codec_id);
+            av_log(ctx, AV_LOG_INFO, "Compressedll      : %9s : %20s :",
+                   desc ? desc->name : "Unsupported",
                    vfd.description);
         } else {
             continue;
@@ -528,8 +528,8 @@ static int mmap_read_frame(AVFormatContext *ctx, AVPacket *pkt)
 
     if (s->frame_size > 0 && buf.bytesused != s->frame_size) {
         av_log(ctx, AV_LOG_ERROR,
-               "The v4l2 frame is %d bytes, but %d bytes are expected\n",
-               buf.bytesused, s->frame_size);
+               "The v4l2 frame is %d bytes, but %d bytes are expected. Flags: 0x%08X\n",
+               buf.bytesused, s->frame_size, buf.flags);
         enqueue_buffer(s, &buf);
         return AVERROR_INVALIDDATA;
     }
@@ -747,7 +747,7 @@ static int v4l2_set_parameters(AVFormatContext *ctx)
             }
         } else {
             av_log(ctx, AV_LOG_WARNING,
-                   "The driver does not allow to change time per frame\n");
+                   "The driver does not permit changing the time per frame\n");
         }
     }
     if (tpf->denominator > 0 && tpf->numerator > 0) {
