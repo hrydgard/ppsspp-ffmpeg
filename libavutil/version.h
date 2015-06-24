@@ -32,7 +32,7 @@
  * @{
  */
 
-#define AV_VERSION_INT(a, b, c) (a<<16 | b<<8 | c)
+#define AV_VERSION_INT(a, b, c) ((a)<<16 | (b)<<8 | (c))
 #define AV_VERSION_DOT(a, b, c) a ##.## b ##.## c
 #define AV_VERSION(a, b, c) AV_VERSION_DOT(a, b, c)
 
@@ -56,7 +56,7 @@
  */
 
 #define LIBAVUTIL_VERSION_MAJOR  54
-#define LIBAVUTIL_VERSION_MINOR  17
+#define LIBAVUTIL_VERSION_MINOR  27
 #define LIBAVUTIL_VERSION_MICRO 100
 
 #define LIBAVUTIL_VERSION_INT   AV_VERSION_INT(LIBAVUTIL_VERSION_MAJOR, \
@@ -118,6 +118,9 @@
 #endif
 #ifndef FF_API_OPT_TYPE_METADATA
 #define FF_API_OPT_TYPE_METADATA        (LIBAVUTIL_VERSION_MAJOR < 55)
+#endif
+#ifndef FF_API_DLOG
+#define FF_API_DLOG                     (LIBAVUTIL_VERSION_MAJOR < 55)
 #endif
 
 #ifndef FF_CONST_AVUTIL55

@@ -35,7 +35,7 @@
 
 #define MAX_PAGE_SIZE 65025
 
-typedef struct {
+typedef struct OGGPage {
     int64_t start_granule;
     int64_t granule;
     int stream_index;
@@ -46,7 +46,7 @@ typedef struct {
     uint16_t size;
 } OGGPage;
 
-typedef struct {
+typedef struct OGGStreamContext {
     unsigned page_counter;
     uint8_t *header[3];
     int header_len[3];
@@ -66,19 +66,22 @@ typedef struct OGGPageList {
     struct OGGPageList *next;
 } OGGPageList;
 
-typedef struct {
+typedef struct OGGContext {
     const AVClass *class;
     OGGPageList *page_list;
     int pref_size; ///< preferred page size (0 => fill all segments)
     int64_t pref_duration;      ///< preferred page duration (0 => fill all segments)
+    int serial_offset;
 } OGGContext;
 
 #define OFFSET(x) offsetof(OGGContext, x)
 #define PARAM AV_OPT_FLAG_ENCODING_PARAM
 
 static const AVOption options[] = {
+    { "serial_offset", "serial number offset",
+        OFFSET(serial_offset), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, PARAM },
     { "oggpagesize", "Set preferred Ogg page size.",
-      offsetof(OGGContext, pref_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, MAX_PAGE_SIZE, AV_OPT_FLAG_ENCODING_PARAM},
+      OFFSET(pref_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, MAX_PAGE_SIZE, PARAM},
     { "pagesize", "preferred page size in bytes (deprecated)",
         OFFSET(pref_size), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, MAX_PAGE_SIZE, PARAM },
     { "page_duration", "preferred page duration, in microseconds",
@@ -279,16 +282,18 @@ static int ogg_buffer_data(AVFormatContext *s, AVStream *st,
     return 0;
 }
 
-static uint8_t *ogg_write_vorbiscomment(int offset, int bitexact,
+static uint8_t *ogg_write_vorbiscomment(int64_t offset, int bitexact,
                                         int *header_len, AVDictionary **m, int framing_bit)
 {
     const char *vendor = bitexact ? "ffmpeg" : LIBAVFORMAT_IDENT;
-    int size;
+    int64_t size;
     uint8_t *p, *p0;
 
     ff_metadata_conv(m, ff_vorbiscomment_metadata_conv, NULL);
 
     size = offset + ff_vorbiscomment_length(*m, vendor) + framing_bit;
+    if (size > INT_MAX)
+        return NULL;
     p = av_mallocz(size);
     if (!p)
         return NULL;
@@ -430,7 +435,7 @@ static int ogg_write_header(AVFormatContext *s)
 
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
-        unsigned serial_num = i;
+        unsigned serial_num = i + ogg->serial_offset;
 
         if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
             if (st->codec->codec_id == AV_CODEC_ID_OPUS)
@@ -615,7 +620,7 @@ static int ogg_write_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     ogg_write_pages(s, 2);
-    return 0;
+    return 1;
 }
 
 static int ogg_write_trailer(AVFormatContext *s)

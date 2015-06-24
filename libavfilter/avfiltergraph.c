@@ -1119,7 +1119,7 @@ static int graph_config_formats(AVFilterGraph *graph, AVClass *log_ctx)
     return 0;
 }
 
-static int ff_avfilter_graph_config_pointers(AVFilterGraph *graph,
+static int graph_config_pointers(AVFilterGraph *graph,
                                              AVClass *log_ctx)
 {
     unsigned i, j;
@@ -1211,7 +1211,7 @@ int avfilter_graph_config(AVFilterGraph *graphctx, void *log_ctx)
         return ret;
     if ((ret = graph_config_links(graphctx, log_ctx)))
         return ret;
-    if ((ret = ff_avfilter_graph_config_pointers(graphctx, log_ctx)))
+    if ((ret = graph_config_pointers(graphctx, log_ctx)))
         return ret;
 
     return 0;
@@ -1280,6 +1280,8 @@ static void heap_bubble_up(AVFilterGraph *graph,
 {
     AVFilterLink **links = graph->sink_links;
 
+    av_assert0(index >= 0);
+
     while (index) {
         int parent = (index - 1) >> 1;
         if (links[parent]->current_pts >= link->current_pts)
@@ -1296,6 +1298,8 @@ static void heap_bubble_down(AVFilterGraph *graph,
                              AVFilterLink *link, int index)
 {
     AVFilterLink **links = graph->sink_links;
+
+    av_assert0(index >= 0);
 
     while (1) {
         int child = 2 * index + 1;

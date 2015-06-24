@@ -96,8 +96,10 @@ static av_cold int utvideo_encode_init(AVCodecContext *avctx)
      * since we cannot decode planes separately with it.
      */
     ret = avpicture_get_size(avctx->pix_fmt, avctx->width, avctx->height);
-    if (ret < 0)
+    if (ret < 0) {
+        av_free(info);
         return ret;
+    }
     utv->buf_size = ret;
 
     utv->buffer = (uint8_t *)av_malloc(utv->buf_size);
@@ -209,7 +211,7 @@ static av_cold int utvideo_encode_close(AVCodecContext *avctx)
 {
     UtVideoContext *utv = (UtVideoContext *)avctx->priv_data;
 
-    av_freep(&avctx->coded_frame);
+    av_frame_free(&avctx->coded_frame);
     av_freep(&avctx->extradata);
     av_freep(&utv->buffer);
 

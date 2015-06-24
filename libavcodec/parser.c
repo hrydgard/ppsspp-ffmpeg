@@ -27,6 +27,7 @@
 #include "libavutil/atomic.h"
 #include "libavutil/mem.h"
 
+#include "internal.h"
 #include "parser.h"
 
 static AVCodecParser *av_first_parser = NULL;
@@ -85,6 +86,8 @@ found:
     s->dts_sync_point       = INT_MIN;
     s->dts_ref_dts_delta    = INT_MIN;
     s->pts_dts_delta        = INT_MIN;
+    s->format               = -1;
+
     return s;
 
 err_out:
@@ -229,9 +232,9 @@ int ff_combine_frame(ParseContext *pc, int next,
                      const uint8_t **buf, int *buf_size)
 {
     if (pc->overread) {
-        av_dlog(NULL, "overread %d, state:%X next:%d index:%d o_index:%d\n",
+        ff_dlog(NULL, "overread %d, state:%X next:%d index:%d o_index:%d\n",
                 pc->overread, pc->state, next, pc->index, pc->overread_index);
-        av_dlog(NULL, "%X %X %X %X\n",
+        ff_dlog(NULL, "%X %X %X %X\n",
                 (*buf)[0], (*buf)[1], (*buf)[2], (*buf)[3]);
     }
 
@@ -252,6 +255,7 @@ int ff_combine_frame(ParseContext *pc, int next,
                                            FF_INPUT_BUFFER_PADDING_SIZE);
 
         if (!new_buffer) {
+            av_log(NULL, AV_LOG_ERROR, "Failed to reallocate parser buffer to %d\n", *buf_size + pc->index + FF_INPUT_BUFFER_PADDING_SIZE);
             pc->index = 0;
             return AVERROR(ENOMEM);
         }
@@ -270,6 +274,7 @@ int ff_combine_frame(ParseContext *pc, int next,
                                            next + pc->index +
                                            FF_INPUT_BUFFER_PADDING_SIZE);
         if (!new_buffer) {
+            av_log(NULL, AV_LOG_ERROR, "Failed to reallocate parser buffer to %d\n", next + pc->index + FF_INPUT_BUFFER_PADDING_SIZE);
             pc->overread_index =
             pc->index = 0;
             return AVERROR(ENOMEM);
@@ -290,9 +295,9 @@ int ff_combine_frame(ParseContext *pc, int next,
     }
 
     if (pc->overread) {
-        av_dlog(NULL, "overread %d, state:%X next:%d index:%d o_index:%d\n",
+        ff_dlog(NULL, "overread %d, state:%X next:%d index:%d o_index:%d\n",
                 pc->overread, pc->state, next, pc->index, pc->overread_index);
-        av_dlog(NULL, "%X %X %X %X\n",
+        ff_dlog(NULL, "%X %X %X %X\n",
                 (*buf)[0], (*buf)[1], (*buf)[2], (*buf)[3]);
     }
 
@@ -308,13 +313,14 @@ void ff_parse_close(AVCodecParserContext *s)
 
 int ff_mpeg4video_split(AVCodecContext *avctx, const uint8_t *buf, int buf_size)
 {
-    int i;
     uint32_t state = -1;
+    const uint8_t *ptr = buf, *end = buf + buf_size;
 
-    for (i = 0; i < buf_size; i++) {
-        state = state << 8 | buf[i];
+    while (ptr < end) {
+        ptr = avpriv_find_start_code(ptr, end, &state);
         if (state == 0x1B3 || state == 0x1B6)
-            return i - 3;
+            return ptr - 4 - buf;
     }
+
     return 0;
 }

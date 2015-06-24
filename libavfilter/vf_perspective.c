@@ -93,8 +93,10 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_GBRP, AV_PIX_FMT_GBRAP, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE
     };
 
-    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
-    return 0;
+    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
+    if (!fmts_list)
+        return AVERROR(ENOMEM);
+    return ff_set_common_formats(ctx, fmts_list);
 }
 
 static inline double get_coeff(double d)
@@ -320,7 +322,7 @@ static int resample_cubic(AVFilterContext *ctx, void *arg,
             }
 
             sum = (sum + (1<<(COEFF_BITS * 2 - 1))) >> (COEFF_BITS * 2);
-            sum = av_clip(sum, 0, 255);
+            sum = av_clip_uint8(sum);
             dst[x + y * dst_linesize] = sum;
         }
     }
@@ -395,7 +397,7 @@ static int resample_linear(AVFilterContext *ctx, void *arg,
                 }
             }
 
-            sum = av_clip(sum, 0, 255);
+            sum = av_clip_uint8(sum);
             dst[x + y * dst_linesize] = sum;
         }
     }

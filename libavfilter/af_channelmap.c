@@ -88,12 +88,13 @@ static char* split(char *message, char delim) {
 
 static int get_channel_idx(char **map, int *ch, char delim, int max_ch)
 {
-    char *next = split(*map, delim);
+    char *next;
     int len;
     int n = 0;
-    if (!next && delim == '-')
-        return AVERROR(EINVAL);
     if (!*map)
+        return AVERROR(EINVAL);
+    next = split(*map, delim);
+    if (!next && delim == '-')
         return AVERROR(EINVAL);
     len = strlen(*map);
     sscanf(*map, "%d%n", ch, &n);
@@ -347,6 +348,7 @@ static int channelmap_filter_frame(AVFilterLink *inlink, AVFrame *buf)
            FFMIN(FF_ARRAY_ELEMS(buf->data), nch_out) * sizeof(buf->data[0]));
 
     buf->channel_layout = outlink->channel_layout;
+    av_frame_set_channels(buf, outlink->channels);
 
     return ff_filter_frame(outlink, buf);
 }

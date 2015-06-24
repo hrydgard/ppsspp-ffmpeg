@@ -42,8 +42,8 @@ void ff_hevc_set_neighbour_available(HEVCContext *s, int x0, int y0,
                                      int nPbW, int nPbH)
 {
     HEVCLocalContext *lc = s->HEVClc;
-    int x0b = x0 & ((1 << s->sps->log2_ctb_size) - 1);
-    int y0b = y0 & ((1 << s->sps->log2_ctb_size) - 1);
+    int x0b = av_mod_uintp2(x0, s->sps->log2_ctb_size);
+    int y0b = av_mod_uintp2(y0, s->sps->log2_ctb_size);
 
     lc->na.cand_up       = (lc->ctb_up_flag   || y0b);
     lc->na.cand_left     = (lc->ctb_left_flag || x0b);
@@ -118,7 +118,7 @@ static av_always_inline void mv_scale(Mv *dst, Mv *src, int td, int tb)
     td = av_clip_int8(td);
     tb = av_clip_int8(tb);
     tx = (0x4000 + abs(td / 2)) / td;
-    scale_factor = av_clip((tb * tx + 32) >> 6, -4096, 4095);
+    scale_factor = av_clip_intp2((tb * tx + 32) >> 6, 12);
     dst->x = av_clip_int16((scale_factor * src->x + 127 +
                            (scale_factor * src->x < 0)) >> 8);
     dst->y = av_clip_int16((scale_factor * src->y + 127 +

@@ -119,12 +119,12 @@ static int on2avc_decode_band_types(On2AVCContext *c, GetBitContext *gb)
         run_len   = 1;
         do {
             run = get_bits(gb, bits_per_sect);
+            if (run > num_bands - band - run_len) {
+                av_log(c->avctx, AV_LOG_ERROR, "Invalid band type run\n");
+                return AVERROR_INVALIDDATA;
+            }
             run_len += run;
         } while (run == esc_val);
-        if (band + run_len > num_bands) {
-            av_log(c->avctx, AV_LOG_ERROR, "Invalid band type run\n");
-            return AVERROR_INVALIDDATA;
-        }
         for (i = band; i < band + run_len; i++) {
             c->band_type[i]    = band_type;
             c->band_run_end[i] = band + run_len;
@@ -795,7 +795,9 @@ static int on2avc_decode_subframe(On2AVCContext *c, const uint8_t *buf,
     GetBitContext gb;
     int i, ret;
 
-    init_get_bits(&gb, buf, buf_size * 8);
+    if ((ret = init_get_bits8(&gb, buf, buf_size)) < 0)
+        return ret;
+
     if (get_bits1(&gb)) {
         av_log(c->avctx, AV_LOG_ERROR, "enh bit set\n");
         return AVERROR_INVALIDDATA;
@@ -846,10 +848,8 @@ static int on2avc_decode_frame(AVCodecContext * avctx, void *data,
     if (c->is_av500) {
         /* get output buffer */
         frame->nb_samples = ON2AVC_SUBFRAME_SIZE;
-        if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
-            av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+        if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
             return ret;
-        }
 
         if ((ret = on2avc_decode_subframe(c, buf, buf_size, frame, 0)) < 0)
             return ret;
@@ -872,10 +872,8 @@ static int on2avc_decode_frame(AVCodecContext * avctx, void *data,
 
         /* get output buffer */
         frame->nb_samples = ON2AVC_SUBFRAME_SIZE * num_frames;
-        if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
-            av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+        if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
             return ret;
-        }
 
         audio_off = 0;
         bytestream2_init(&gb, buf, buf_size);

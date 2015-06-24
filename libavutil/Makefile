@@ -60,6 +60,7 @@ HEADERS = adler32.h                                                     \
           time.h                                                        \
           timecode.h                                                    \
           timestamp.h                                                   \
+          twofish.h                                                     \
           version.h                                                     \
           xtea.h                                                        \
 
@@ -87,6 +88,7 @@ OBJS = adler32.o                                                        \
        cast5.o                                                          \
        camellia.o                                                       \
        channel_layout.o                                                 \
+       color_utils.o                                                    \
        cpu.o                                                            \
        crc.o                                                            \
        des.o                                                            \
@@ -129,6 +131,7 @@ OBJS = adler32.o                                                        \
        time.o                                                           \
        timecode.o                                                       \
        tree.o                                                           \
+       twofish.o                                                        \
        utils.o                                                          \
        xga_font_data.o                                                  \
        xtea.o                                                           \
@@ -184,6 +187,7 @@ TESTPROGS = adler32                                                     \
             sha512                                                      \
             softfloat                                                   \
             tree                                                        \
+            twofish                                                     \
             utf8                                                        \
             xtea                                                        \
 
