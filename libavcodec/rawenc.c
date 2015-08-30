@@ -35,7 +35,10 @@ static av_cold int raw_encode_init(AVCodecContext *avctx)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(avctx->pix_fmt);
 
-    avctx->coded_frame = av_frame_alloc();
+    avctx->coded_frame            = av_frame_alloc();
+    if (!avctx->coded_frame)
+        return AVERROR(ENOMEM);
+
     avctx->coded_frame->pict_type = AV_PICTURE_TYPE_I;
     avctx->bits_per_coded_sample = av_get_bits_per_pixel(desc);
     if(!avctx->codec_tag)
@@ -51,7 +54,7 @@ static int raw_encode(AVCodecContext *avctx, AVPacket *pkt,
     if (ret < 0)
         return ret;
 
-    if ((ret = ff_alloc_packet2(avctx, pkt, ret)) < 0)
+    if ((ret = ff_alloc_packet(pkt, ret)) < 0)
         return ret;
     if ((ret = avpicture_layout((const AVPicture *)frame, avctx->pix_fmt, avctx->width,
                                 avctx->height, pkt->data, pkt->size)) < 0)
@@ -68,7 +71,7 @@ static int raw_encode(AVCodecContext *avctx, AVPacket *pkt,
     return 0;
 }
 
-static av_cold int raw_close(AVCodecContext *avctx)
+static av_cold int raw_encode_close(AVCodecContext *avctx)
 {
     av_frame_free(&avctx->coded_frame);
     return 0;
@@ -80,6 +83,6 @@ AVCodec ff_rawvideo_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_RAWVIDEO,
     .init           = raw_encode_init,
+    .close          = raw_encode_close,
     .encode2        = raw_encode,
-    .close          = raw_close,
 };

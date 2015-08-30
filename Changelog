@@ -1,7 +1,231 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
-version <next>
+version <next>:
+
+version 2.7.2:
+- imc: use correct position for flcoeffs2 calculation
+- hevc: check slice address length
+- snow: remove an obsolete av_assert2
+- webp: fix infinite loop in webp_decode_frame
+- wavpack: limit extra_bits to 32 and use get_bits_long
+- ffmpeg: only count got_output/errors in decode_error_stat
+- ffmpeg: exit_on_error if decoding a packet failed
+- pthread_frame: forward error codes when flushing
+- huffyuvdec: validate image size
+- wavpack: use get_bits_long to read up to 32 bits
+- nutdec: check maxpos in read_sm_data before returning success
+- s302m: fix arithmetic exception
+- vc1dec: use get_bits_long and limit the read bits to 32
+- mpegaudiodec: copy AVFloatDSPContext from first context to all contexts
+- avcodec/vp8: Check buffer size in vp8_decode_frame_header()
+- avcodec/vp8: Fix null pointer dereference in ff_vp8_decode_free()
+- avcodec/diracdec: Check for hpel_base allocation failure
+- avcodec/rv34: Clear pointers in ff_rv34_decode_init_thread_copy()
+- avfilter/af_aresample: Check ff_all_* for allocation failures
+- avcodec/pthread_frame: clear priv_data, avoid stale pointer in error case
+- swscale/utils: Clear pix buffers
+- avutil/fifo: Fix the case where func() returns less bytes than requested in av_fifo_generic_write()
+- ffmpeg: Fix cleanup after failed allocation of output_files
+- avformat/mov: Fix deallocation when MOVStreamContext failed to allocate
+- ffmpeg: Fix crash with ost->last_frame allocation failure
+- ffmpeg: Fix cleanup with ost = NULL
+- avcodec/pthread_frame: check avctx on deallocation
+- avcodec/sanm: Reset sizes in destroy_buffers()
+- avcodec/alac: Clear pointers in allocate_buffers()
+- bytestream2: set the reader to the end when reading more than available
+- avcodec/utils: use a minimum 32pixel width in  avcodec_align_dimensions2() for H.264
+- avcodec/mpegvideo: Clear pointers in ff_mpv_common_init()
+- oggparsedirac: check return value of init_get_bits
+- wmalosslessdec: reset frame->nb_samples on packet loss
+- wmalosslessdec: avoid reading 0 bits with get_bits
+- Put a space between string literals and macros.
+- avcodec/rawenc: Use ff_alloc_packet() instead of ff_alloc_packet2()
+- avcodec/aacsbr: check that the element type matches before applying SBR
+- avcodec/h264_slice: Use w/h from the AVFrame instead of mb_w/h
+- vp9/update_prob: prevent out of bounds table read
+- avfilter/vf_transpose: Fix rounding error
+- avcodec/h264_refs: discard mismatching references
+- avcodec/mjpegdec: Fix small picture upscale
+- avcodec/pngdec: Check values before updating context in decode_fctl_chunk()
+- avcodec/pngdec: Copy IHDR & plte state from last thread
+- avcodec/pngdec: Require a IHDR chunk before fctl
+- avcodec/pngdec: Only allow one IHDR chunk
+- wmavoice: limit wmavoice_decode_packet return value to packet size
+- swscale/swscale_unscaled: Fix rounding difference with RGBA output between little and big endian
+- ffmpeg: Do not use the data/size of a bitstream filter after failure
+- swscale/x86/rgb2rgb_template: fix signedness of v in shuffle_bytes_2103_{mmx,mmxext}
+- vda: unlock the pixel buffer base address.
+- swscale/rgb2rgb_template: Fix signedness of v in shuffle_bytes_2103_c()
+- swscale/rgb2rgb_template: Implement shuffle_bytes_0321_c and fix shuffle_bytes_2103_c on BE
+- swscale/rgb2rgb_template: Disable shuffle_bytes_2103_c on big endian
+- swr: Remember previously set int_sample_format from user
+- swresample: soxr implementation for swr_get_out_samples()
+- avformat/swfdec: Do not error out on pixel format changes
+- ffmpeg_opt: Fix forcing fourccs
+- configure: Check for x265_api_get
+- swscale/x86/rgb2rgb_template: don't call emms on sse2/avx functions
+- swscale/x86/rgb2rgb_template: add missing xmm clobbers
+- library.mak: Workaround SDL redefining main and breaking fate tests on mingw
+- vaapi_h264: fix RefPicList[] field flags.
+
+version 2.7.1:
+- postproc: fix unaligned access
+- avformat: clarify what package needs to be compiled with SSL support
+- avcodec/libx264: Avoid reconfig on equivalent aspect ratios
+- avcodec/flacenc: Fix Invalid Rice order
+- tls_gnutls: fix hang on disconnection
+- avcodec/hevc_ps: Only discard overread VPS if a previous is available
+- ffmpeg: Free last_frame instead of just unref
+- avcodec/ffv1enc: fix bps for >8bit yuv when not explicitly set
+- avio: fix potential crashes when combining ffio_ensure_seekback + crc
+- examples/demuxing_decoding: use properties from frame instead of video_dec_ctx
+- h264: er: Copy from the previous reference only if compatible
+- doc: fix spelling errors
+- configure: only disable VSX for !ppc64el
+- ffmpeg_opt: Check for localtime() failure
+- avformat/singlejpeg: fix standalone compilation
+- configure: Disable VSX on unspecified / generic CPUs
+- avformat: Fix bug in parse_rps for HEVC.
+- takdec: ensure chan2 is a valid channel index
+- avcodec/h264_slice: Use AVFrame dimensions for grayscale handling
+
+
+version 2.7:
+- FFT video filter
+- TDSC decoder
+- DTS lossless extension (XLL) decoding (not lossless, disabled by default)
+- showwavespic filter
+- DTS decoding through libdcadec
+- Drop support for nvenc API before 5.0
+- nvenc HEVC encoder
+- Detelecine filter
+- Intel QSV-accelerated H.264 encoding
+- MMAL-accelerated H.264 decoding
+- basic APNG encoder and muxer with default extension "apng"
+- unpack DivX-style packed B-frames in MPEG-4 bitstream filter
+- WebM Live Chunk Muxer
+- nvenc level and tier options
+- chorus filter
+- Canopus HQ/HQA decoder
+- Automatically rotate videos based on metadata in ffmpeg
+- improved Quickdraw compatibility
+- VP9 high bit-depth and extended colorspaces decoding support
+- WebPAnimEncoder API when available for encoding and muxing WebP
+- Direct3D11-accelerated decoding
+- Support Secure Transport
+- Multipart JPEG demuxer
+
+
+version 2.6:
+- nvenc encoder
+- 10bit spp filter
+- colorlevels filter
+- RIFX format for *.wav files
+- RTP/mpegts muxer
+- non continuous cache protocol support
+- tblend filter
+- cropdetect support for non 8bpp, absolute (if limit >= 1) and relative (if limit < 1.0) threshold
+- Camellia symmetric block cipher
+- OpenH264 encoder wrapper
+- VOC seeking support
+- Closed caption Decoder
+- fspp, uspp, pp7 MPlayer postprocessing filters ported to native filters
+- showpalette filter
+- Twofish symmetric block cipher
+- Support DNx100 (960x720@8)
+- eq2 filter ported from libmpcodecs as eq filter
+- removed libmpcodecs
+- Changed default DNxHD colour range in QuickTime .mov derivatives to mpeg range
+- ported softpulldown filter from libmpcodecs as repeatfields filter
+- dcshift filter
+- RTP depacketizer for loss tolerant payload format for MP3 audio (RFC 5219)
+- RTP depacketizer for AC3 payload format (RFC 4184)
+- palettegen and paletteuse filters
+- VP9 RTP payload format (draft 0) experimental depacketizer
+- RTP depacketizer for DV (RFC 6469)
+- DXVA2-accelerated HEVC decoding
+- AAC ELD 480 decoding
+- Intel QSV-accelerated H.264 decoding
+- DSS SP decoder and DSS demuxer
+- Fix stsd atom corruption in DNxHD QuickTimes
+- Canopus HQX decoder
+- RTP depacketization of T.140 text (RFC 4103)
+- Port MIPS optimizations to 64-bit
+
+
+version 2.5:
+- HEVC/H.265 RTP payload format (draft v6) packetizer
+- SUP/PGS subtitle demuxer
+- ffprobe -show_pixel_formats option
+- CAST128 symmetric block cipher, ECB mode
+- STL subtitle demuxer and decoder
+- libutvideo YUV 4:2:2 10bit support
+- XCB-based screen-grabber
+- UDP-Lite support (RFC 3828)
+- xBR scaling filter
+- AVFoundation screen capturing support
+- ffserver supports codec private options
+- creating DASH compatible fragmented MP4, MPEG-DASH segmenting muxer
+- WebP muxer with animated WebP support
+- zygoaudio decoding support
+- APNG demuxer
+- postproc visualization support
+
+
+version 2.4:
+- Icecast protocol
+- ported lenscorrection filter from frei0r filter
+- large optimizations in dctdnoiz to make it usable
+- ICY metadata are now requested by default with the HTTP protocol
+- support for using metadata in stream specifiers in fftools
+- LZMA compression support in TIFF decoder
+- H.261 RTP payload format (RFC 4587) depacketizer and experimental packetizer
+- HEVC/H.265 RTP payload format (draft v6) depacketizer
+- added codecview filter to visualize information exported by some codecs
+- Matroska 3D support thorugh side data
+- HTML generation using texi2html is deprecated in favor of makeinfo/texi2any
+- silenceremove filter
+
+
+version 2.3:
+- AC3 fixed-point decoding
+- shuffleplanes filter
+- subfile protocol
+- Phantom Cine demuxer
+- replaygain data export
+- VP7 video decoder
+- Alias PIX image encoder and decoder
+- Improvements to the BRender PIX image decoder
+- Improvements to the XBM decoder
+- QTKit input device
+- improvements to OpenEXR image decoder
+- support decoding 16-bit RLE SGI images
+- GDI screen grabbing for Windows
+- alternative rendition support for HTTP Live Streaming
+- AVFoundation input device
+- Direct Stream Digital (DSD) decoder
+- Magic Lantern Video (MLV) demuxer
+- On2 AVC (Audio for Video) decoder
+- support for decoding through DXVA2 in ffmpeg
+- libbs2b-based stereo-to-binaural audio filter
+- libx264 reference frames count limiting depending on level
+- native Opus decoder
+- display matrix export and rotation API
+- WebVTT encoder
+- showcqt multimedia filter
+- zoompan filter
+- signalstats filter
+- hqx filter (hq2x, hq3x, hq4x)
+- flanger filter
+- Image format auto-detection
+- LRC demuxer and muxer
+- Samba protocol (via libsmbclient)
+- WebM DASH Manifest muxer
+- libfribidi support in drawtext
+
+
+version 2.2:
 
 - HNM version 4 demuxer and video decoder
 - Live HDS muxer
@@ -17,6 +241,19 @@ version <next>
 - WebP encoding via libwebp
 - ATRAC3+ decoder
 - VP8 in Ogg demuxing
+- side & metadata support in NUT
+- framepack filter
+- XYZ12 rawvideo support in NUT
+- Exif metadata support in WebP decoder
+- OpenGL device
+- Use metadata_header_padding to control padding in ID3 tags (currently used in
+  MP3, AIFF, and OMA files), FLAC header, and the AVI "junk" block.
+- Mirillis FIC video decoder
+- Support DNx444
+- libx265 encoder
+- dejudder filter
+- Autodetect VDA like all other hardware accelerations
+- aliases and defaults for Ogg subtypes (opus, spx)
 
 
 version 2.1:
@@ -204,7 +441,7 @@ version 1.1:
 - JSON captions for TED talks decoding support
 - SOX Resampler support in libswresample
 - aselect filter
-- SGI RLE 8-bit decoder
+- SGI RLE 8-bit / Silicon Graphics RLE 8-bit video decoder
 - Silicon Graphics Motion Video Compressor 1 & 2 decoder
 - Silicon Graphics Movie demuxer
 - apad filter
@@ -248,7 +485,9 @@ version 1.0:
 - RTMPE protocol support
 - RTMPTE protocol support
 - showwaves and showspectrum filter
-- LucasArts SMUSH playback support
+- LucasArts SMUSH SANM playback support
+- LucasArts SMUSH VIMA audio decoder (ADPCM)
+- LucasArts SMUSH demuxer
 - SAMI, RealText and SubViewer demuxers and decoders
 - Heart Of Darkness PAF playback support
 - iec61883 device
@@ -372,6 +611,7 @@ version 0.10:
 - ffwavesynth decoder
 - aviocat tool
 - ffeval tool
+- support encoding and decoding 4-channel SGI images
 
 
 version 0.9:
@@ -420,7 +660,7 @@ easier to use. The changes are:
           all the stream in the first input file, except for the second audio
           stream'.
     * There is a new option -c (or -codec) for choosing the decoder/encoder to
-      use, which allows to precisely specify target stream(s) consistently with
+      use, which makes it possible to precisely specify target stream(s) consistently with
       other options. E.g. -c:v lib264 sets the codec for all video streams, -c:a:0
       libvorbis sets the codec for the first audio stream and -c copy copies all
       the streams without reencoding. Old -vcodec/-acodec/-scodec options are now

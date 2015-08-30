@@ -80,7 +80,7 @@ DECLARE_ALIGNED(8, const uint64_t, ff_w1111)        = 0x0001000100010001ULL;
 #include "swscale_template.c"
 #endif
 
-void updateMMXDitherTables(SwsContext *c, int dstY, int lumBufIndex, int chrBufIndex,
+void ff_updateMMXDitherTables(SwsContext *c, int dstY, int lumBufIndex, int chrBufIndex,
                            int lastInLumBuf, int lastInChrBuf)
 {
     const int dstH= c->dstH;
@@ -201,7 +201,7 @@ static void yuv2yuvX_sse3(const int16_t *filter, int filterSize,
                            const int16_t **src, uint8_t *dest, int dstW,
                            const uint8_t *dither, int offset)
 {
-    if(((int)dest) & 15){
+    if(((uintptr_t)dest) & 15){
         yuv2yuvX_mmxext(filter, filterSize, src, dest, dstW, dither, offset);
         return;
     }

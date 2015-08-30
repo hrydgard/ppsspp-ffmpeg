@@ -47,7 +47,7 @@
 #endif
 
 #ifndef emms_c
-#   define emms_c()
+#   define emms_c() while(0)
 #endif
 
 #ifndef attribute_align_arg
@@ -164,11 +164,6 @@
 
 #include "libm.h"
 
-#if defined(_MSC_VER)
-#pragma comment(linker, "/include:"EXTERN_PREFIX"avpriv_strtod")
-#pragma comment(linker, "/include:"EXTERN_PREFIX"avpriv_snprintf")
-#endif
-
 /**
  * Return NULL if CONFIG_SMALL is true, otherwise the argument
  * without modification. Used to disable the definition of strings
@@ -241,6 +236,12 @@ void avpriv_request_sample(void *avc,
                            const char *msg, ...) av_printf_format(2, 3);
 
 #if HAVE_LIBC_MSVCRT
+#include <crtversion.h>
+#if defined(_VC_CRT_MAJOR_VERSION) && _VC_CRT_MAJOR_VERSION < 14
+#pragma comment(linker, "/include:" EXTERN_PREFIX "avpriv_strtod")
+#pragma comment(linker, "/include:" EXTERN_PREFIX "avpriv_snprintf")
+#endif
+
 #define avpriv_open ff_open
 #define PTRDIFF_SPECIFIER "Id"
 #define SIZE_SPECIFIER "Iu"
@@ -272,5 +273,7 @@ static av_always_inline av_const int avpriv_mirror(int x, int w)
 #if FF_API_GET_CHANNEL_LAYOUT_COMPAT
 uint64_t ff_get_channel_layout(const char *name, int compat);
 #endif
+
+void ff_check_pixfmt_descriptors(void);
 
 #endif /* AVUTIL_INTERNAL_H */
