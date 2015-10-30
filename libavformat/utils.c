@@ -2630,7 +2630,9 @@ static int try_decode_frame(AVFormatContext *s, AVStream *st, AVPacket *avpkt,
     if (!avcodec_is_open(st->codec) &&
         st->info->found_decoder <= 0 &&
         (st->codec->codec_id != -st->info->found_decoder || !st->codec->codec_id)) {
+#ifndef BLACKBERRY
         AVDictionary *thread_opt = NULL;
+#endif
 
         codec = find_decoder(s, st, st->codec->codec_id);
 
@@ -2642,12 +2644,19 @@ static int try_decode_frame(AVFormatContext *s, AVStream *st, AVPacket *avpkt,
 
         /* Force thread count to 1 since the H.264 decoder will not extract
          * SPS and PPS to extradata during multi-threaded decoding. */
+#ifndef BLACKBERRY
         av_dict_set(options ? options : &thread_opt, "threads", "1", 0);
         if (s->codec_whitelist)
             av_dict_set(options ? options : &thread_opt, "codec_whitelist", s->codec_whitelist, 0);
-        ret = avcodec_open2(st->codec, codec, options ? options : &thread_opt);
+#endif
+        ret = avcodec_open2(st->codec, codec, options ? options
+#ifndef BLACKBERRY
+                            : &thread_opt);
         if (!options)
             av_dict_free(&thread_opt);
+#else
+                            : NULL);
+#endif
         if (ret < 0) {
             st->info->found_decoder = -st->codec->codec_id;
             goto fail;
@@ -3057,7 +3066,9 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
     for (i = 0; i < ic->nb_streams; i++) {
         const AVCodec *codec;
+#ifndef BLACKBERRY
         AVDictionary *thread_opt = NULL;
+#endif
         st = ic->streams[i];
 
         if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO ||
@@ -3086,15 +3097,22 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
         /* Force thread count to 1 since the H.264 decoder will not extract
          * SPS and PPS to extradata during multi-threaded decoding. */
+#ifndef BLACKBERRY
         av_dict_set(options ? &options[i] : &thread_opt, "threads", "1", 0);
 
         if (ic->codec_whitelist)
             av_dict_set(options ? &options[i] : &thread_opt, "codec_whitelist", ic->codec_whitelist, 0);
+#endif
 
         /* Ensure that subtitle_header is properly set. */
         if (st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE
             && codec && !st->codec->codec) {
-            if (avcodec_open2(st->codec, codec, options ? &options[i] : &thread_opt) < 0)
+            if (avcodec_open2(st->codec, codec, options ? &options[i]
+#ifndef BLACKBERRY
+                              : &thread_opt) < 0)
+#else
+                              : NULL) < 0)
+#endif
                 av_log(ic, AV_LOG_WARNING,
                        "Failed to open codec in av_find_stream_info\n");
         }
@@ -3102,12 +3120,19 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         // Try to just open decoders, in case this is enough to get parameters.
         if (!has_codec_parameters(st, NULL) && st->request_probe <= 0) {
             if (codec && !st->codec->codec)
-                if (avcodec_open2(st->codec, codec, options ? &options[i] : &thread_opt) < 0)
+                if (avcodec_open2(st->codec, codec, options ? &options[i]
+#ifndef BLACKBERRY
+                                  : &thread_opt) < 0)
+#else
+                                  : NULL) < 0)
+#endif
                     av_log(ic, AV_LOG_WARNING,
                            "Failed to open codec in av_find_stream_info\n");
         }
+#ifndef BLACKBERRY
         if (!options)
             av_dict_free(&thread_opt);
+#endif
     }
 
     for (i = 0; i < ic->nb_streams; i++) {
