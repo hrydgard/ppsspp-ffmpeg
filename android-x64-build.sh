@@ -2,13 +2,18 @@
 #Change NDK to your Android NDK location
 NDK=/c/AndroidNDK
 PLATFORM=$NDK/platforms/android-21/arch-x86_64/
-PREBUILT=$NDK/toolchains/x86_64-4.9/prebuilt/windows-x86_64/
+PREBUILT=$NDK/toolchains/x86_64-4.9/prebuilt/windows-x86_64
+PREBUILTLLVM=$NDK/toolchains/llvm/prebuilt/windows-x86_64
+
+set -e
 
 GENERAL="\
    --enable-cross-compile \
-   --extra-libs="-lgcc" \
-   --cc=$PREBUILT/bin/x86_64-linux-android-gcc \
+   --enable-pic \
+   --extra-libs="-latomic" \
+   --cc=$PREBUILTLLVM/bin/clang \
    --cross-prefix=$PREBUILT/bin/x86_64-linux-android- \
+   --ld=$PREBUILTLLVM/bin/clang \
    --nm=$PREBUILT/bin/x86_64-linux-android-nm"
 
 MODULES="\
@@ -78,10 +83,10 @@ function build_x86_64
     --arch=x86_64 \
     ${GENERAL} \
     --sysroot=$PLATFORM \
-    --extra-cflags=" -O3 -DANDROID -Dipv6mr_interface=ipv6mr_ifindex -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -fomit-frame-pointer -march=k8" \
+    --extra-cflags=" --target=x86_64-linux-android -O3 -DANDROID -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -fomit-frame-pointer -march=x86-64" \
     --disable-shared \
     --enable-static \
-    --extra-ldflags="-Wl,-rpath-link=$PLATFORM/usr/lib64 -L$PLATFORM/usr/lib64 -nostdlib -lc -lm -ldl -llog" \
+    --extra-ldflags=" -B$PREBUILT/bin/x86_64-linux-android- --target=x86_64-linux-android -Wl,--rpath-link,$PLATFORM/usr/lib64 -L$PLATFORM/usr/lib64 -L$PREBUILT/x86_64-linux-android/lib -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
     --disable-everything \
     ${MODULES} \
@@ -94,7 +99,7 @@ function build_x86_64
     ${PARSERS}
 
 make clean
-make install
+make -j4 install
 }
 
 build_x86_64
