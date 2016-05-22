@@ -251,7 +251,7 @@ static int decode_picture_header(ProresContext *ctx, const uint8_t *buf,
                       (1 << (4 + ctx->frame->interlaced_frame)) - 1) >>
                      (4 + ctx->frame->interlaced_frame);
 
-    remainder    = ctx->num_x_mbs & ((1 << slice_width_factor) - 1);
+    remainder    = av_mod_uintp2(ctx->num_x_mbs, slice_width_factor);
     num_x_slices = (ctx->num_x_mbs >> slice_width_factor) + (remainder & 1) +
                    ((remainder >> 1) & 1) + ((remainder >> 2) & 1);
 
@@ -780,5 +780,5 @@ AVCodec ff_prores_lgpl_decoder = {
     .init           = decode_init,
     .close          = decode_close,
     .decode         = decode_frame,
-    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_SLICE_THREADS,
+    .capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SLICE_THREADS,
 };

@@ -231,7 +231,7 @@ static int xcbgrab_frame_shm(AVFormatContext *s, AVPacket *pkt)
     xcb_shm_get_image_reply_t *img;
     xcb_drawable_t drawable = c->screen->root;
     uint8_t *data;
-    int size = c->frame_size + FF_INPUT_BUFFER_PADDING_SIZE;
+    int size = c->frame_size + AV_INPUT_BUFFER_PADDING_SIZE;
     int id   = shmget(IPC_PRIVATE, size, IPC_CREAT | 0777);
     xcb_generic_error_t *e = NULL;
 
@@ -591,7 +591,7 @@ static void setup_window(AVFormatContext *s)
     uint32_t values[] = { 1,
                           XCB_EVENT_MASK_EXPOSURE |
                           XCB_EVENT_MASK_STRUCTURE_NOTIFY };
-    xcb_rectangle_t rect = { 0, 0, c->width, c->height };
+    av_unused xcb_rectangle_t rect = { 0, 0, c->width, c->height };
 
     c->window = xcb_generate_id(c->conn);
 

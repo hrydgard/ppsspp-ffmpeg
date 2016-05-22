@@ -34,6 +34,7 @@
 #include "mpegvideo.h"
 #include "mpegvideodata.h"
 #include "h263.h"
+#include "h263data.h"
 #include "mathops.h"
 #include "mpegutils.h"
 #include "unary.h"
@@ -44,7 +45,7 @@
 /**
  * Table of number of bits a motion vector component needs.
  */
-static uint8_t mv_penalty[MAX_FCODE+1][MAX_MV*2+1];
+static uint8_t mv_penalty[MAX_FCODE+1][MAX_DMV*2+1];
 
 /**
  * Minimal fcode that a motion vector component would need.
@@ -452,7 +453,7 @@ void ff_h263_encode_mb(MpegEncContext * s,
     int16_t pred_dc;
     int16_t rec_intradc[6];
     int16_t *dc_ptr[6];
-    const int interleaved_stats = s->avctx->flags & CODEC_FLAG_PASS1;
+    const int interleaved_stats = s->avctx->flags & AV_CODEC_FLAG_PASS1;
 
     if (!s->mb_intra) {
         /* compute cbp */
@@ -677,7 +678,7 @@ static av_cold void init_mv_penalty_and_fcode(MpegEncContext *s)
     int mv;
 
     for(f_code=1; f_code<=MAX_FCODE; f_code++){
-        for(mv=-MAX_MV; mv<=MAX_MV; mv++){
+        for(mv=-MAX_DMV; mv<=MAX_DMV; mv++){
             int len;
 
             if(mv==0) len= ff_mvtab[0][1];
@@ -698,7 +699,7 @@ static av_cold void init_mv_penalty_and_fcode(MpegEncContext *s)
                 }
             }
 
-            mv_penalty[f_code][mv+MAX_MV]= len;
+            mv_penalty[f_code][mv+MAX_DMV]= len;
         }
     }
 

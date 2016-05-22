@@ -21,6 +21,11 @@
  */
 
 /*
+ * signal_standard, color_siting, store_user_comments and klv_fill_key version
+ * fixes sponsored by NOA GmbH
+ */
+
+/*
  * References
  * SMPTE 336M KLV Data Encoding Protocol Using Key-Length-Value
  * SMPTE 377M MXF File Format Specifications
@@ -319,6 +324,7 @@ typedef struct MXFContext {
     int signal_standard;
     uint32_t tagged_value_count;
     AVRational audio_edit_rate;
+    int store_user_comments;
 } MXFContext;
 
 static const uint8_t uuid_base[]            = { 0xAD,0xAB,0x44,0x24,0x2f,0x25,0x4d,0xc7,0x92,0xff,0x29,0xbd };
@@ -376,7 +382,6 @@ static const MXFLocalTagPair mxf_local_tag_batch[] = {
     { 0x4404, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x07,0x02,0x01,0x10,0x02,0x05,0x00,0x00}}, /* Package Modified Date */
     { 0x4402, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x01,0x01,0x03,0x03,0x02,0x01,0x00,0x00,0x00}}, /* Package Name */
     { 0x4403, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x06,0x01,0x01,0x04,0x06,0x05,0x00,0x00}}, /* Tracks Strong reference array */
-    { 0x4406, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x03,0x02,0x01,0x02,0x0C,0x00,0x00,0x00}}, /* User Comments */
     { 0x4701, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x06,0x01,0x01,0x04,0x02,0x03,0x00,0x00}}, /* Descriptor */
     // Track
     { 0x4801, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x01,0x07,0x01,0x01,0x00,0x00,0x00,0x00}}, /* Track ID */
@@ -396,9 +401,6 @@ static const MXFLocalTagPair mxf_local_tag_batch[] = {
     { 0x1501, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x07,0x02,0x01,0x03,0x01,0x05,0x00,0x00}}, /* Start Time Code */
     { 0x1502, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x04,0x04,0x01,0x01,0x02,0x06,0x00,0x00}}, /* Rounded Time Code Base */
     { 0x1503, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x01,0x04,0x04,0x01,0x01,0x05,0x00,0x00,0x00}}, /* Drop Frame */
-    // Tagged Value
-    { 0x5001, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x03,0x02,0x01,0x02,0x09,0x01,0x00,0x00}}, /* Name */
-    { 0x5003, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x03,0x02,0x01,0x02,0x0A,0x01,0x00,0x00}}, /* Value */
     // File Descriptor
     { 0x3F01, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x04,0x06,0x01,0x01,0x04,0x06,0x0B,0x00,0x00}}, /* Sub Descriptors reference array */
     { 0x3006, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x05,0x06,0x01,0x01,0x03,0x05,0x00,0x00,0x00}}, /* Linked Track ID */
@@ -442,6 +444,12 @@ static const MXFLocalTagPair mxf_local_tag_batch[] = {
     // Wave Audio Essence Descriptor
     { 0x3D09, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x05,0x04,0x02,0x03,0x03,0x05,0x00,0x00,0x00}}, /* Average Bytes Per Second */
     { 0x3D0A, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x05,0x04,0x02,0x03,0x02,0x01,0x00,0x00,0x00}}, /* Block Align */
+};
+
+static const MXFLocalTagPair mxf_user_comments_local_tag[] = {
+    { 0x4406, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x03,0x02,0x01,0x02,0x0C,0x00,0x00,0x00}}, /* User Comments */
+    { 0x5001, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x03,0x02,0x01,0x02,0x09,0x01,0x00,0x00}}, /* Name */
+    { 0x5003, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x03,0x02,0x01,0x02,0x0A,0x01,0x00,0x00}}, /* Value */
 };
 
 static void mxf_write_uuid(AVIOContext *pb, enum MXFMetadataSetType type, int value)
@@ -521,10 +529,12 @@ static int mxf_get_essence_container_ul_index(enum AVCodecID id)
 
 static void mxf_write_primer_pack(AVFormatContext *s)
 {
+    MXFContext *mxf = s->priv_data;
     AVIOContext *pb = s->pb;
     int local_tag_number, i = 0;
 
     local_tag_number = FF_ARRAY_ELEMS(mxf_local_tag_batch);
+    local_tag_number += mxf->store_user_comments * FF_ARRAY_ELEMS(mxf_user_comments_local_tag);
 
     avio_write(pb, primer_pack_key, 16);
     klv_encode_ber_length(pb, local_tag_number * 18 + 8);
@@ -532,10 +542,15 @@ static void mxf_write_primer_pack(AVFormatContext *s)
     avio_wb32(pb, local_tag_number); // local_tag num
     avio_wb32(pb, 18); // item size, always 18 according to the specs
 
-    for (i = 0; i < local_tag_number; i++) {
+    for (i = 0; i < FF_ARRAY_ELEMS(mxf_local_tag_batch); i++) {
         avio_wb16(pb, mxf_local_tag_batch[i].local_tag);
         avio_write(pb, mxf_local_tag_batch[i].uid, 16);
     }
+    if (mxf->store_user_comments)
+        for (i = 0; i < FF_ARRAY_ELEMS(mxf_user_comments_local_tag); i++) {
+            avio_wb16(pb, mxf_user_comments_local_tag[i].local_tag);
+            avio_write(pb, mxf_user_comments_local_tag[i].uid, 16);
+        }
 }
 
 static void mxf_write_local_tag(AVIOContext *pb, int size, int tag)
@@ -998,7 +1013,7 @@ static void mxf_write_cdci_common(AVFormatContext *s, AVStream *st, const UID ke
     int stored_height = (st->codec->height+15)/16*16;
     int display_height;
     int f1, f2;
-    unsigned desc_size = size+8+8+8+8+8+8+8+5+16+sc->interlaced*4+12+20+5;
+    unsigned desc_size = size+8+8+8+8+8+8+8+5+16+4+12+20+5;
     if (sc->interlaced && sc->field_dominance)
         desc_size += 5;
     if (sc->signal_standard)
@@ -1066,12 +1081,12 @@ static void mxf_write_cdci_common(AVFormatContext *s, AVStream *st, const UID ke
         f1 *= 2;
     }
 
-    mxf_write_local_tag(pb, 12+sc->interlaced*4, 0x320D);
-    avio_wb32(pb, sc->interlaced ? 2 : 1);
+
+    mxf_write_local_tag(pb, 16, 0x320D);
+    avio_wb32(pb, 2);
     avio_wb32(pb, 4);
     avio_wb32(pb, f1);
-    if (sc->interlaced)
-        avio_wb32(pb, f2);
+    avio_wb32(pb, f2);
 
     mxf_write_local_tag(pb, 8, 0x320E);
     avio_wb32(pb, sc->aspect_ratio.num);
@@ -1249,14 +1264,15 @@ static void mxf_write_package(AVFormatContext *s, enum MXFMetadataSetType type, 
     int user_comment_count = 0;
 
     if (type == MaterialPackage) {
-        user_comment_count = mxf_write_user_comments(s, s->metadata);
+        if (mxf->store_user_comments)
+            user_comment_count = mxf_write_user_comments(s, s->metadata);
         mxf_write_metadata_key(pb, 0x013600);
         PRINT_KEY(s, "Material Package key", pb->buf_ptr - 16);
-        klv_encode_ber_length(pb, 104 + name_size + (16*track_count) + (16*user_comment_count));
+        klv_encode_ber_length(pb, 92 + name_size + (16*track_count) + (16*user_comment_count) + 12LL*mxf->store_user_comments);
     } else {
         mxf_write_metadata_key(pb, 0x013700);
         PRINT_KEY(s, "Source Package key", pb->buf_ptr - 16);
-        klv_encode_ber_length(pb, 124 + name_size + (16*track_count)); // 20 bytes length for descriptor reference
+        klv_encode_ber_length(pb, 112 + name_size + (16*track_count) + 12LL*mxf->store_user_comments); // 20 bytes length for descriptor reference
     }
 
     // write uid
@@ -1291,10 +1307,12 @@ static void mxf_write_package(AVFormatContext *s, enum MXFMetadataSetType type, 
         mxf_write_uuid(pb, type == MaterialPackage ? Track : Track + TypeBottom, i);
 
     // write user comment refs
-    mxf_write_local_tag(pb, user_comment_count*16 + 8, 0x4406);
-    mxf_write_refs_count(pb, user_comment_count);
-    for (i = 0; i < user_comment_count; i++)
-         mxf_write_uuid(pb, TaggedValue, mxf->tagged_value_count - user_comment_count + i);
+    if (mxf->store_user_comments) {
+        mxf_write_local_tag(pb, user_comment_count*16 + 8, 0x4406);
+        mxf_write_refs_count(pb, user_comment_count);
+        for (i = 0; i < user_comment_count; i++)
+            mxf_write_uuid(pb, TaggedValue, mxf->tagged_value_count - user_comment_count + i);
+    }
 
     // write multiple descriptor reference
     if (type == SourcePackage) {
@@ -1902,7 +1920,7 @@ static const UID mxf_mpeg2_codec_uls[] = {
 
 static const UID *mxf_get_mpeg2_codec_ul(AVCodecContext *avctx)
 {
-    int long_gop = avctx->gop_size > 1 || avctx->has_b_frames;
+    int long_gop = 1;
 
     if (avctx->profile == 4) { // Main
         if (avctx->level == 8) // Main
@@ -2023,7 +2041,6 @@ static int mxf_write_header(AVFormatContext *s)
     int i, ret;
     uint8_t present[FF_ARRAY_ELEMS(mxf_essence_container_uls)] = {0};
     const MXFSamplesPerFrame *spf = NULL;
-    AVDictionaryEntry *t;
     int64_t timestamp = 0;
 
     if (!s->nb_streams)
@@ -2033,6 +2050,9 @@ static int mxf_write_header(AVFormatContext *s)
         av_log(s, AV_LOG_ERROR, "there must be exactly one stream for mxf opatom\n");
         return -1;
     }
+
+    if (!av_dict_get(s->metadata, "comment_", NULL, AV_DICT_IGNORE_SUFFIX))
+        mxf->store_user_comments = 0;
 
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
@@ -2056,7 +2076,7 @@ static int mxf_write_header(AVFormatContext *s)
             sc->color_siting = 0xFF;
 
             if (pix_desc) {
-                sc->component_depth     = pix_desc->comp[0].depth_minus1 + 1;
+                sc->component_depth     = pix_desc->comp[0].depth;
                 sc->h_chroma_sub_sample = 1 << pix_desc->log2_chroma_w;
             }
             switch (ff_choose_chroma_location(s, st)) {
@@ -2191,9 +2211,7 @@ static int mxf_write_header(AVFormatContext *s)
             sc->order = AV_RB32(sc->track_essence_element_key+12);
     }
 
-    if (t = av_dict_get(s->metadata, "creation_time", NULL, 0))
-        timestamp = ff_iso8601_to_unix_time(t->value);
-    if (timestamp)
+    if (ff_parse_creation_time_metadata(s, &timestamp, 1) > 0)
         mxf->timestamp = mxf_parse_timestamp(timestamp);
     mxf->duration = -1;
 
@@ -2448,6 +2466,10 @@ static int mxf_write_packet(AVFormatContext *s, AVPacket *pkt)
         }
         mxf->edit_units_count++;
     } else if (!mxf->edit_unit_byte_count && st->index == 1) {
+        if (!mxf->edit_units_count) {
+            av_log(s, AV_LOG_ERROR, "No packets in first stream\n");
+            return AVERROR_PATCHWELCOME;
+        }
         mxf->index_entries[mxf->edit_units_count-1].slice_offset =
             mxf->body_offset - mxf->index_entries[mxf->edit_units_count-1].offset;
     }
@@ -2585,7 +2607,7 @@ static int mxf_interleave_get_packet(AVFormatContext *s, AVPacket *out, AVPacket
 
                 if(s->streams[pktl->pkt.stream_index]->last_in_packet_buffer == pktl)
                     s->streams[pktl->pkt.stream_index]->last_in_packet_buffer= NULL;
-                av_free_packet(&pktl->pkt);
+                av_packet_unref(&pktl->pkt);
                 av_freep(&pktl);
                 pktl = next;
             }
@@ -2652,6 +2674,8 @@ static int mxf_interleave(AVFormatContext *s, AVPacket *out, AVPacket *pkt, int 
 
 static const AVOption mxf_options[] = {
     MXF_COMMON_OPTIONS
+    { "store_user_comments", "",
+      offsetof(MXFContext, store_user_comments), AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM},
     { NULL },
 };
 
@@ -2666,6 +2690,8 @@ static const AVOption d10_options[] = {
     { "d10_channelcount", "Force/set channelcount in generic sound essence descriptor",
       offsetof(MXFContext, channel_count), AV_OPT_TYPE_INT, {.i64 = -1}, -1, 8, AV_OPT_FLAG_ENCODING_PARAM},
     MXF_COMMON_OPTIONS
+    { "store_user_comments", "",
+      offsetof(MXFContext, store_user_comments), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM},
     { NULL },
 };
 

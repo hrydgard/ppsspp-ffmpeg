@@ -113,7 +113,7 @@ static int dca_parse_params(const uint8_t *buf, int buf_size, int *duration,
                             int *sample_rate, int *framesize)
 {
     GetBitContext gb;
-    uint8_t hdr[12 + FF_INPUT_BUFFER_PADDING_SIZE] = { 0 };
+    uint8_t hdr[12 + AV_INPUT_BUFFER_PADDING_SIZE] = { 0 };
     int ret, sample_blocks, sr_code;
 
     if (buf_size < 12)
@@ -165,8 +165,9 @@ static int dca_parse(AVCodecParserContext *s, AVCodecContext *avctx,
 
     /* read the duration and sample rate from the frame header */
     if (!dca_parse_params(buf, buf_size, &duration, &sample_rate, &pc1->framesize)) {
-        s->duration        = duration;
-        avctx->sample_rate = sample_rate;
+        if (!avctx->sample_rate)
+            avctx->sample_rate = sample_rate;
+        s->duration = av_rescale(duration, avctx->sample_rate, sample_rate);
     } else
         s->duration = 0;
 

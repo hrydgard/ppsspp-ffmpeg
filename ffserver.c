@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "libavformat/avformat.h"
-// FIXME those are internal headers, ffserver _really_ shouldn't use them
+/* FIXME: those are internal headers, ffserver _really_ shouldn't use them */
 #include "libavformat/ffm.h"
 #include "libavformat/network.h"
 #include "libavformat/os_support.h"
@@ -70,6 +70,8 @@
 
 #include "cmdutils.h"
 #include "ffserver_config.h"
+
+#define PATH_LENGTH 1024
 
 const char program_name[] = "ffserver";
 const int program_birth_year = 2000;
@@ -209,6 +211,7 @@ static void close_connection(HTTPContext *c);
 
 /* HTTP handling */
 static int handle_connection(HTTPContext *c);
+static inline void print_stream_params(AVIOContext *pb, FFServerStream *stream);
 static void compute_status(HTTPContext *c);
 static int open_input_stream(HTTPContext *c, const char *info);
 static int http_parse_request(HTTPContext *c);
@@ -239,6 +242,11 @@ static HTTPContext *rtp_new_connection(struct sockaddr_in *from_addr,
 static int rtp_new_av_stream(HTTPContext *c,
                              int stream_index, struct sockaddr_in *dest_addr,
                              HTTPContext *rtsp_c);
+/* utils */
+static size_t htmlencode (const char *src, char **dest);
+static inline void cp_html_entity (char *buffer, const char *entity);
+static inline int check_codec_match(AVCodecContext *ccf, AVCodecContext *ccs,
+                                    int stream);
 
 static const char *my_program_name;
 
@@ -250,18 +258,86 @@ static unsigned int nb_connections;
 
 static uint64_t current_bandwidth;
 
-static int64_t cur_time;           // Making this global saves on passing it around everywhere
+/* Making this global saves on passing it around everywhere */
+static int64_t cur_time;
 
 static AVLFG random_state;
 
 static FILE *logfile = NULL;
 
-static void htmlstrip(char *s) {
-    while (s && *s) {
-        s += strspn(s, "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ,. ");
-        if (*s)
-            *s++ = '?';
+static inline void cp_html_entity (char *buffer, const char *entity) {
+    if (!buffer || !entity)
+        return;
+    while (*entity)
+        *buffer++ = *entity++;
+}
+
+/**
+ * Substitutes known conflicting chars on a text string with
+ * their corresponding HTML entities.
+ *
+ * Returns the number of bytes in the 'encoded' representation
+ * not including the terminating NUL.
+ */
+static size_t htmlencode (const char *src, char **dest) {
+    const char *amp = "&amp;";
+    const char *lt  = "&lt;";
+    const char *gt  = "&gt;";
+    const char *start;
+    char *tmp;
+    size_t final_size = 0;
+
+    if (!src)
+        return 0;
+
+    start = src;
+
+    /* Compute needed dest size */
+    while (*src != '\0') {
+        switch(*src) {
+            case 38: /* & */
+                final_size += 5;
+                break;
+            case 60: /* < */
+            case 62: /* > */
+                final_size += 4;
+                break;
+            default:
+                final_size++;
+        }
+        src++;
     }
+
+    src = start;
+    *dest = av_mallocz(final_size + 1);
+    if (!*dest)
+        return 0;
+
+    /* Build dest */
+    tmp = *dest;
+    while (*src != '\0') {
+        switch(*src) {
+            case 38: /* & */
+                cp_html_entity (tmp, amp);
+                tmp += 5;
+                break;
+            case 60: /* < */
+                cp_html_entity (tmp, lt);
+                tmp += 4;
+                break;
+            case 62: /* > */
+                cp_html_entity (tmp, gt);
+                tmp += 4;
+                break;
+            default:
+                *tmp = *src;
+                tmp += 1;
+        }
+        src++;
+    }
+    *tmp = '\0';
+
+    return final_size;
 }
 
 static int64_t ffm_read_write_index(int fd)
@@ -283,29 +359,37 @@ static int ffm_write_write_index(int fd, int64_t pos)
     for(i=0;i<8;i++)
         buf[i] = (pos >> (56 - i * 8)) & 0xff;
     if (lseek(fd, 8, SEEK_SET) < 0)
-        return AVERROR(EIO);
+        goto bail_eio;
     if (write(fd, buf, 8) != 8)
-        return AVERROR(EIO);
+        goto bail_eio;
+
     return 8;
+
+bail_eio:
+    return AVERROR(EIO);
 }
 
 static void ffm_set_write_index(AVFormatContext *s, int64_t pos,
                                 int64_t file_size)
 {
-    FFMContext *ffm = s->priv_data;
-    ffm->write_index = pos;
-    ffm->file_size = file_size;
+    av_opt_set_int(s, "server_attached", 1, AV_OPT_SEARCH_CHILDREN);
+    av_opt_set_int(s, "ffm_write_index", pos, AV_OPT_SEARCH_CHILDREN);
+    av_opt_set_int(s, "ffm_file_size", file_size, AV_OPT_SEARCH_CHILDREN);
 }
 
-static char *ctime1(char *buf2, int buf_size)
+static char *ctime1(char *buf2, size_t buf_size)
 {
     time_t ti;
     char *p;
 
     ti = time(NULL);
     p = ctime(&ti);
+    if (!p || !*p) {
+        *buf2 = '\0';
+        return buf2;
+    }
     av_strlcpy(buf2, p, buf_size);
-    p = buf2 + strlen(p) - 1;
+    p = buf2 + strlen(buf2) - 1;
     if (*p == '\n')
         *p = '\0';
     return buf2;
@@ -314,12 +398,12 @@ static char *ctime1(char *buf2, int buf_size)
 static void http_vlog(const char *fmt, va_list vargs)
 {
     static int print_prefix = 1;
+    char buf[32];
 
     if (!logfile)
         return;
 
     if (print_prefix) {
-        char buf[32];
         ctime1(buf, sizeof(buf));
         fprintf(logfile, "%s ", buf);
     }
@@ -386,16 +470,33 @@ static int compute_datarate(DataRateData *drd, int64_t count)
 
 static void start_children(FFServerStream *feed)
 {
-    char pathname[1024];
+    char *pathname;
     char *slash;
     int i;
+    size_t cmd_length;
 
     if (no_launch)
         return;
 
+    cmd_length = strlen(my_program_name);
+
+   /**
+    * FIXME: WIP Safeguard. Remove after clearing all harcoded
+    * '1024' path lengths
+    */
+    if (cmd_length > PATH_LENGTH - 1) {
+        http_log("Could not start children. Command line: '%s' exceeds "
+                    "path length limit (%d)\n", my_program_name, PATH_LENGTH);
+        return;
+    }
+
+    pathname = av_strdup (my_program_name);
+    if (!pathname) {
+        http_log("Could not allocate memory for children cmd line\n");
+        return;
+    }
    /* replace "ffserver" with "ffmpeg" in the path of current
     * program. Ignore user provided path */
-    av_strlcpy(pathname, my_program_name, sizeof(pathname));
 
     slash = strrchr(pathname, '/');
     if (!slash)
@@ -413,8 +514,9 @@ static void start_children(FFServerStream *feed)
 
         feed->pid = fork();
         if (feed->pid < 0) {
-            http_log("Unable to create children\n");
-            exit(1);
+            http_log("Unable to create children: %s\n", strerror(errno));
+            av_free (pathname);
+            exit(EXIT_FAILURE);
         }
 
         if (feed->pid)
@@ -443,8 +545,10 @@ static void start_children(FFServerStream *feed)
 
         signal(SIGPIPE, SIG_DFL);
         execvp(pathname, feed->child_argv);
+        av_free (pathname);
         _exit(1);
     }
+    av_free (pathname);
 }
 
 /* open a listening socket */
@@ -468,20 +572,22 @@ static int socket_open_listen(struct sockaddr_in *my_addr)
         snprintf(bindmsg, sizeof(bindmsg), "bind(port %d)",
                  ntohs(my_addr->sin_port));
         perror (bindmsg);
-        closesocket(server_fd);
-        return -1;
+        goto fail;
     }
 
     if (listen (server_fd, 5) < 0) {
         perror ("listen");
-        closesocket(server_fd);
-        return -1;
+        goto fail;
     }
 
     if (ff_socket_nonblock(server_fd, 1) < 0)
         av_log(NULL, AV_LOG_WARNING, "ff_socket_nonblock failed\n");
 
     return server_fd;
+
+fail:
+    closesocket(server_fd);
+    return -1;
 }
 
 /* start all multicast streams */
@@ -504,8 +610,7 @@ static void start_multicast(void)
         random1 = av_lfg_get(&random_state);
 
         /* open the RTP connection */
-        snprintf(session_id, sizeof(session_id), "%08x%08x",
-                 random0, random1);
+        snprintf(session_id, sizeof(session_id), "%08x%08x", random0, random1);
 
         /* choose a port if none given */
         if (stream->multicast_port == 0) {
@@ -563,25 +668,21 @@ static int http_server(void)
 
     if (config.http_addr.sin_port) {
         server_fd = socket_open_listen(&config.http_addr);
-        if (server_fd < 0) {
-            av_free(poll_table);
-            return -1;
-        }
+        if (server_fd < 0)
+            goto quit;
     }
 
     if (config.rtsp_addr.sin_port) {
         rtsp_server_fd = socket_open_listen(&config.rtsp_addr);
         if (rtsp_server_fd < 0) {
-            av_free(poll_table);
             closesocket(server_fd);
-            return -1;
+            goto quit;
         }
     }
 
     if (!rtsp_server_fd && !server_fd) {
         http_log("HTTP and RTSP disabled.\n");
-        av_free(poll_table);
-        return -1;
+        goto quit;
     }
 
     http_log("FFserver started.\n");
@@ -630,9 +731,8 @@ static int http_server(void)
                     poll_entry++;
                 } else {
                     /* when ffserver is doing the timing, we work by
-                       looking at which packet needs to be sent every
-                       10 ms */
-                    /* one tick wait XXX: 10 ms assumed */
+                     * looking at which packet needs to be sent every
+                     * 10 ms (one tick wait XXX: 10 ms assumed) */
                     if (delay > 10)
                         delay = 10;
                 }
@@ -655,13 +755,12 @@ static int http_server(void)
         }
 
         /* wait for an event on one connection. We poll at least every
-           second to handle timeouts */
+         * second to handle timeouts */
         do {
             ret = poll(poll_table, poll_entry - poll_table, delay);
             if (ret < 0 && ff_neterrno() != AVERROR(EAGAIN) &&
                 ff_neterrno() != AVERROR(EINTR)) {
-                av_free(poll_table);
-                return -1;
+                goto quit;
             }
         } while (ret < 0);
 
@@ -695,6 +794,10 @@ static int http_server(void)
                 new_connection(rtsp_server_fd, 1);
         }
     }
+
+quit:
+    av_free(poll_table);
+    return -1;
 }
 
 /* start waiting for a new HTTP/RTSP request */
@@ -703,13 +806,9 @@ static void start_wait_request(HTTPContext *c, int is_rtsp)
     c->buffer_ptr = c->buffer;
     c->buffer_end = c->buffer + c->buffer_size - 1; /* leave room for '\0' */
 
-    if (is_rtsp) {
-        c->timeout = cur_time + RTSP_REQUEST_TIMEOUT;
-        c->state = RTSPSTATE_WAIT_REQUEST;
-    } else {
-        c->timeout = cur_time + HTTP_REQUEST_TIMEOUT;
-        c->state = HTTPSTATE_WAIT_REQUEST;
-    }
+    c->state = is_rtsp ? RTSPSTATE_WAIT_REQUEST : HTTPSTATE_WAIT_REQUEST;
+    c->timeout = cur_time +
+                 (is_rtsp ? RTSP_REQUEST_TIMEOUT : HTTP_REQUEST_TIMEOUT);
 }
 
 static void http_send_too_busy_reply(int fd)
@@ -719,9 +818,12 @@ static void http_send_too_busy_reply(int fd)
                        "HTTP/1.0 503 Server too busy\r\n"
                        "Content-type: text/html\r\n"
                        "\r\n"
+                       "<!DOCTYPE html>\n"
                        "<html><head><title>Too busy</title></head><body>\r\n"
-                       "<p>The server is too busy to serve your request at this time.</p>\r\n"
-                       "<p>The number of current connections is %u, and this exceeds the limit of %u.</p>\r\n"
+                       "<p>The server is too busy to serve your request at "
+                       "this time.</p>\r\n"
+                       "<p>The number of current connections is %u, and this "
+                       "exceeds the limit of %u.</p>\r\n"
                        "</body></html>\r\n",
                        nb_connections, config.nb_max_connections);
     av_assert0(len < sizeof(buffer));
@@ -787,7 +889,6 @@ static void close_connection(HTTPContext *c)
     HTTPContext **cp, *c1;
     int i, nb_streams;
     AVFormatContext *ctx;
-    URLContext *h;
     AVStream *st;
 
     /* remove connection from list */
@@ -832,9 +933,7 @@ static void close_connection(HTTPContext *c)
             av_freep(&ctx->streams[0]);
             av_freep(&ctx);
         }
-        h = c->rtp_handles[i];
-        if (h)
-            ffurl_close(h);
+        ffurl_close(c->rtp_handles[i]);
     }
 
     ctx = &c->fmt_ctx;
@@ -903,11 +1002,11 @@ static int handle_connection(HTTPContext *c)
         if ((ptr >= c->buffer + 2 && !memcmp(ptr-2, "\n\n", 2)) ||
             (ptr >= c->buffer + 4 && !memcmp(ptr-4, "\r\n\r\n", 4))) {
             /* request found : parse it and reply */
-            if (c->state == HTTPSTATE_WAIT_REQUEST) {
+            if (c->state == HTTPSTATE_WAIT_REQUEST)
                 ret = http_parse_request(c);
-            } else {
+            else
                 ret = rtsp_parse_request(c);
-            }
+
             if (ret < 0)
                 return -1;
         } else if (ptr >= c->buffer_end) {
@@ -952,8 +1051,8 @@ static int handle_connection(HTTPContext *c)
     case HTTPSTATE_SEND_DATA_HEADER:
     case HTTPSTATE_SEND_DATA_TRAILER:
         /* for packetized output, we consider we can always write (the
-           input streams set the speed). It may be better to verify
-           that we do not rely too much on the kernel queues */
+         * input streams set the speed). It may be better to verify
+         * that we do not rely too much on the kernel queues */
         if (!c->is_packetized) {
             if (c->poll_entry->revents & (POLLERR | POLLHUP))
                 return -1;
@@ -1166,8 +1265,10 @@ static int modify_current_stream(HTTPContext *c, char *rates)
                 break;
         }
 
-        if (c->switch_feed_streams[i] >= 0 && c->switch_feed_streams[i] != c->feed_streams[i])
+        if (c->switch_feed_streams[i] >= 0 &&
+            c->switch_feed_streams[i] != c->feed_streams[i]) {
             action_required = 1;
+        }
     }
 
     return action_required;
@@ -1271,17 +1372,17 @@ static int validate_acl(FFServerStream *stream, HTTPContext *c)
 
     if (stream->dynamic_acl[0]) {
         acl = parse_dynamic_acl(stream, c);
-
         ret = validate_acl_list(acl, c);
-
         free_acl_list(acl);
     }
 
     return ret;
 }
 
-/* compute the real filename of a file by matching it without its
-   extensions to all the stream's filenames */
+/**
+ * compute the real filename of a file by matching it without its
+ * extensions to all the stream's filenames
+ */
 static void compute_real_filename(char *filename, int max_size)
 {
     char file1[1024];
@@ -1289,7 +1390,6 @@ static void compute_real_filename(char *filename, int max_size)
     char *p;
     FFServerStream *stream;
 
-    /* compute filename by matching without the file extensions */
     av_strlcpy(file1, filename, sizeof(file1));
     p = strrchr(file1, '.');
     if (p)
@@ -1326,6 +1426,7 @@ static int http_parse_request(HTTPContext *c)
     char url[1024], *q;
     char protocol[32];
     char msg[1024];
+    char *encoded_msg = NULL;
     const char *mime_type;
     FFServerStream *stream;
     int i;
@@ -1399,7 +1500,7 @@ static int http_parse_request(HTTPContext *c)
         compute_real_filename(filename, sizeof(filename) - 1);
     }
 
-    // "redirect" / request to index.html
+    /* "redirect" request to index.html */
     if (!strlen(filename))
         av_strlcpy(filename, "index.html", sizeof(filename) - 1);
 
@@ -1427,6 +1528,7 @@ static int http_parse_request(HTTPContext *c)
                       "Location: %s\r\n"
                       "Content-type: text/html\r\n"
                       "\r\n"
+                      "<!DOCTYPE html>\n"
                       "<html><head><title>Moved</title></head><body>\r\n"
                       "You should be <a href=\"%s\">redirected</a>.\r\n"
                       "</body></html>\r\n",
@@ -1452,7 +1554,7 @@ static int http_parse_request(HTTPContext *c)
     if (c->post == 0 && stream->stream_type == STREAM_TYPE_LIVE)
         current_bandwidth += stream->bandwidth;
 
-    /* If already streaming this feed, do not let start another feeder. */
+    /* If already streaming this feed, do not let another feeder start */
     if (stream->feed_opened) {
         snprintf(msg, sizeof(msg), "This feed is already being received.");
         http_log("Feed '%s' already being received\n", stream->feed_filename);
@@ -1466,10 +1568,13 @@ static int http_parse_request(HTTPContext *c)
                       "HTTP/1.0 503 Server too busy\r\n"
                       "Content-type: text/html\r\n"
                       "\r\n"
+                      "<!DOCTYPE html>\n"
                       "<html><head><title>Too busy</title></head><body>\r\n"
-                      "<p>The server is too busy to serve your request at this time.</p>\r\n"
-                      "<p>The bandwidth being served (including your stream) is %"PRIu64"kbit/sec, "
-                      "and this exceeds the limit of %"PRIu64"kbit/sec.</p>\r\n"
+                      "<p>The server is too busy to serve your request at "
+                      "this time.</p>\r\n"
+                      "<p>The bandwidth being served (including your stream) "
+                      "is %"PRIu64"kbit/s, and this exceeds the limit of "
+                      "%"PRIu64"kbit/s.</p>\r\n"
                       "</body></html>\r\n",
                  current_bandwidth, config.max_bandwidth);
         q += strlen(q);
@@ -1721,25 +1826,33 @@ static int http_parse_request(HTTPContext *c)
  send_error:
     c->http_error = 404;
     q = c->buffer;
-    htmlstrip(msg);
+    if (!htmlencode(msg, &encoded_msg)) {
+        http_log("Could not encode filename '%s' as HTML\n", msg);
+    }
     snprintf(q, c->buffer_size,
                   "HTTP/1.0 404 Not Found\r\n"
                   "Content-type: text/html\r\n"
                   "\r\n"
+                  "<!DOCTYPE html>\n"
                   "<html>\n"
-                  "<head><title>404 Not Found</title></head>\n"
+                  "<head>\n"
+                  "<meta charset=\"UTF-8\">\n"
+                  "<title>404 Not Found</title>\n"
+                  "</head>\n"
                   "<body>%s</body>\n"
-                  "</html>\n", msg);
+                  "</html>\n", encoded_msg? encoded_msg : "File not found");
     q += strlen(q);
     /* prepare output buffer */
     c->buffer_ptr = c->buffer;
     c->buffer_end = q;
     c->state = HTTPSTATE_SEND_HEADER;
+    av_freep(&encoded_msg);
     return 0;
  send_status:
     compute_status(c);
-    c->http_error = 200; /* horrible : we use this value to avoid
-                            going to the send data state */
+    /* horrible: we use this value to avoid
+     * going to the send data state */
+    c->http_error = 200;
     c->state = HTTPSTATE_SEND_HEADER;
     return 0;
 }
@@ -1752,6 +1865,52 @@ static void fmt_bytecount(AVIOContext *pb, int64_t count)
     for (s = suffix; count >= 100000 && s[1]; count /= 1000, s++);
 
     avio_printf(pb, "%"PRId64"%c", count, *s);
+}
+
+static inline void print_stream_params(AVIOContext *pb, FFServerStream *stream)
+{
+    int i, stream_no;
+    const char *type = "unknown";
+    char parameters[64];
+    AVStream *st;
+    AVCodec *codec;
+
+    stream_no = stream->nb_streams;
+
+    avio_printf(pb, "<table cellspacing=0 cellpadding=4><tr><th>Stream<th>"
+                    "type<th>kbit/s<th align=left>codec<th align=left>"
+                    "Parameters\n");
+
+    for (i = 0; i < stream_no; i++) {
+        st = stream->streams[i];
+        codec = avcodec_find_encoder(st->codec->codec_id);
+
+        parameters[0] = 0;
+
+        switch(st->codec->codec_type) {
+        case AVMEDIA_TYPE_AUDIO:
+            type = "audio";
+            snprintf(parameters, sizeof(parameters), "%d channel(s), %d Hz",
+                     st->codec->channels, st->codec->sample_rate);
+            break;
+        case AVMEDIA_TYPE_VIDEO:
+            type = "video";
+            snprintf(parameters, sizeof(parameters),
+                     "%dx%d, q=%d-%d, fps=%d", st->codec->width,
+                     st->codec->height, st->codec->qmin, st->codec->qmax,
+                     st->codec->time_base.den / st->codec->time_base.num);
+            break;
+        default:
+            abort();
+        }
+
+        avio_printf(pb, "<tr><td align=right>%d<td>%s<td align=right>%"PRId64
+                        "<td>%s<td>%s\n",
+                    i, type, (int64_t)st->codec->bit_rate/1000,
+                    codec ? codec->name : "", parameters);
+     }
+
+     avio_printf(pb, "</table>\n");
 }
 
 static void compute_status(HTTPContext *c)
@@ -1775,6 +1934,7 @@ static void compute_status(HTTPContext *c)
     avio_printf(pb, "Pragma: no-cache\r\n");
     avio_printf(pb, "\r\n");
 
+    avio_printf(pb, "<!DOCTYPE html>\n");
     avio_printf(pb, "<html><head><title>%s Status</title>\n", program_name);
     if (c->stream->feed_filename[0])
         avio_printf(pb, "<link rel=\"shortcut icon\" href=\"%s\">\n",
@@ -1784,7 +1944,7 @@ static void compute_status(HTTPContext *c)
     /* format status */
     avio_printf(pb, "<h2>Available Streams</h2>\n");
     avio_printf(pb, "<table cellspacing=0 cellpadding=4>\n");
-    avio_printf(pb, "<tr><th valign=top>Path<th align=left>Served<br>Conns<th><br>bytes<th valign=top>Format<th>Bit rate<br>kbits/s<th align=left>Video<br>kbits/s<th><br>Codec<th align=left>Audio<br>kbits/s<th><br>Codec<th align=left valign=top>Feed\n");
+    avio_printf(pb, "<tr><th valign=top>Path<th align=left>Served<br>Conns<th><br>bytes<th valign=top>Format<th>Bit rate<br>kbit/s<th align=left>Video<br>kbit/s<th><br>Codec<th align=left>Audio<br>kbit/s<th><br>Codec<th align=left valign=top>Feed\n");
     stream = config.first_stream;
     while (stream) {
         char sfilename[1024];
@@ -1804,8 +1964,8 @@ static void compute_status(HTTPContext *c)
                 strcpy(eosf - 3, ".ram");
             else if (stream->fmt && !strcmp(stream->fmt->name, "rtp")) {
                 /* generate a sample RTSP director if
-                   unicast. Generate an SDP redirector if
-                   multicast */
+                 * unicast. Generate an SDP redirector if
+                 * multicast */
                 eosf = strrchr(sfilename, '.');
                 if (!eosf)
                     eosf = sfilename + strlen(sfilename);
@@ -1894,7 +2054,7 @@ static void compute_status(HTTPContext *c)
 
         avio_printf(pb, "<h2>Feed %s</h2>", stream->filename);
         if (stream->pid) {
-            avio_printf(pb, "Running as pid %d.\n", stream->pid);
+            avio_printf(pb, "Running as pid %"PRId64".\n", (int64_t) stream->pid);
 
 #if defined(linux)
             {
@@ -1903,8 +2063,8 @@ static void compute_status(HTTPContext *c)
 
                 /* This is somewhat linux specific I guess */
                 snprintf(ps_cmd, sizeof(ps_cmd),
-                         "ps -o \"%%cpu,cputime\" --no-headers %d",
-                         stream->pid);
+                         "ps -o \"%%cpu,cputime\" --no-headers %"PRId64"",
+                         (int64_t) stream->pid);
 
                  pid_stat = popen(ps_cmd, "r");
                  if (pid_stat) {
@@ -1924,42 +2084,7 @@ static void compute_status(HTTPContext *c)
             avio_printf(pb, "<p>");
         }
 
-        avio_printf(pb, "<table cellspacing=0 cellpadding=4><tr><th>Stream<th>"
-                        "type<th>kbits/s<th align=left>codec<th align=left>"
-                        "Parameters\n");
-
-        for (i = 0; i < stream->nb_streams; i++) {
-            AVStream *st = stream->streams[i];
-            AVCodec *codec = avcodec_find_encoder(st->codec->codec_id);
-            const char *type = "unknown";
-            char parameters[64];
-
-            parameters[0] = 0;
-
-            switch(st->codec->codec_type) {
-            case AVMEDIA_TYPE_AUDIO:
-                type = "audio";
-                snprintf(parameters, sizeof(parameters), "%d channel(s), %d Hz",
-                         st->codec->channels, st->codec->sample_rate);
-                break;
-            case AVMEDIA_TYPE_VIDEO:
-                type = "video";
-                snprintf(parameters, sizeof(parameters),
-                         "%dx%d, q=%d-%d, fps=%d", st->codec->width,
-                         st->codec->height, st->codec->qmin, st->codec->qmax,
-                         st->codec->time_base.den / st->codec->time_base.num);
-                break;
-            default:
-                abort();
-            }
-
-            avio_printf(pb, "<tr><td align=right>%d<td>%s<td align=right>%d"
-                            "<td>%s<td>%s\n",
-                        i, type, st->codec->bit_rate/1000,
-                        codec ? codec->name : "", parameters);
-        }
-
-        avio_printf(pb, "</table>\n");
+        print_stream_params(pb, stream);
         stream = stream->next;
     }
 
@@ -1974,7 +2099,7 @@ static void compute_status(HTTPContext *c)
 
     avio_printf(pb, "<table>\n");
     avio_printf(pb, "<tr><th>#<th>File<th>IP<th>Proto<th>State<th>Target "
-                    "bits/sec<th>Actual bits/sec<th>Bytes transferred\n");
+                    "bit/s<th>Actual bit/s<th>Bytes transferred\n");
     c1 = first_http_ctx;
     i = 0;
     while (c1) {
@@ -2111,8 +2236,7 @@ static int64_t get_server_clock(HTTPContext *c)
     return (cur_time - c->start_time) * 1000;
 }
 
-/* return the estimated time at which the current packet must be sent
-   (in us) */
+/* return the estimated time (in us) at which the current packet must be sent */
 static int64_t get_packet_send_clock(HTTPContext *c)
 {
     int bytes_left, bytes_sent, frame_bytes;
@@ -2120,11 +2244,10 @@ static int64_t get_packet_send_clock(HTTPContext *c)
     frame_bytes = c->cur_frame_bytes;
     if (frame_bytes <= 0)
         return c->cur_pts;
-    else {
-        bytes_left = c->buffer_end - c->buffer_ptr;
-        bytes_sent = frame_bytes - bytes_left;
-        return c->cur_pts + (c->cur_frame_duration * bytes_sent) / frame_bytes;
-    }
+
+    bytes_left = c->buffer_end - c->buffer_ptr;
+    bytes_sent = frame_bytes - bytes_left;
+    return c->cur_pts + (c->cur_frame_duration * bytes_sent) / frame_bytes;
 }
 
 
@@ -2151,7 +2274,8 @@ static int http_prepare_data(HTTPContext *c)
             AVStream *src;
             c->fmt_ctx.streams[i] = av_mallocz(sizeof(AVStream));
 
-            /* if file or feed, then just take streams from FFServerStream struct */
+            /* if file or feed, then just take streams from FFServerStream
+             * struct */
             if (!c->stream->feed ||
                 c->stream->feed == c->stream)
                 src = c->stream->streams[i];
@@ -2216,28 +2340,28 @@ static int http_prepare_data(HTTPContext *c)
             if (ret < 0) {
                 if (c->stream->feed) {
                     /* if coming from feed, it means we reached the end of the
-                       ffm file, so must wait for more data */
+                     * ffm file, so must wait for more data */
                     c->state = HTTPSTATE_WAIT_FEED;
                     return 1; /* state changed */
-                } else if (ret == AVERROR(EAGAIN)) {
+                }
+                if (ret == AVERROR(EAGAIN)) {
                     /* input not ready, come back later */
                     return 0;
+                }
+                if (c->stream->loop) {
+                    avformat_close_input(&c->fmt_in);
+                    if (open_input_stream(c, "") < 0)
+                        goto no_loop;
+                    goto redo;
                 } else {
-                    if (c->stream->loop) {
-                        avformat_close_input(&c->fmt_in);
-                        if (open_input_stream(c, "") < 0)
-                            goto no_loop;
-                        goto redo;
-                    } else {
                     no_loop:
                         /* must send trailer now because EOF or error */
                         c->state = HTTPSTATE_SEND_DATA_TRAILER;
-                    }
                 }
             } else {
                 int source_index = pkt.stream_index;
                 /* update first pts if needed */
-                if (c->first_pts == AV_NOPTS_VALUE) {
+                if (c->first_pts == AV_NOPTS_VALUE && pkt.dts != AV_NOPTS_VALUE) {
                     c->first_pts = av_rescale_q(pkt.dts, c->fmt_in->streams[pkt.stream_index]->time_base, AV_TIME_BASE_Q);
                     c->start_time = cur_time;
                 }
@@ -2276,14 +2400,16 @@ static int http_prepare_data(HTTPContext *c)
                      * XXX: need more abstract handling */
                     if (c->is_packetized) {
                         /* compute send time and duration */
-                        c->cur_pts = av_rescale_q(pkt.dts, ist->time_base, AV_TIME_BASE_Q);
-                        c->cur_pts -= c->first_pts;
+                        if (pkt.dts != AV_NOPTS_VALUE) {
+                            c->cur_pts = av_rescale_q(pkt.dts, ist->time_base, AV_TIME_BASE_Q);
+                            c->cur_pts -= c->first_pts;
+                        }
                         c->cur_frame_duration = av_rescale_q(pkt.duration, ist->time_base, AV_TIME_BASE_Q);
                         /* find RTP context */
                         c->packet_stream_index = pkt.stream_index;
                         ctx = c->rtp_ctx[c->packet_stream_index];
                         if(!ctx) {
-                            av_free_packet(&pkt);
+                            av_packet_unref(&pkt);
                             break;
                         }
                         codec = ctx->streams[0]->codec;
@@ -2303,9 +2429,9 @@ static int http_prepare_data(HTTPContext *c)
                             max_packet_size = c->rtp_handles[c->packet_stream_index]->max_packet_size;
                         ret = ffio_open_dyn_packet_buf(&ctx->pb,
                                                        max_packet_size);
-                    } else {
+                    } else
                         ret = avio_open_dyn_buf(&ctx->pb);
-                    }
+
                     if (ret < 0) {
                         /* XXX: potential leak */
                         return -1;
@@ -2329,17 +2455,18 @@ static int http_prepare_data(HTTPContext *c)
 
                     av_freep(&c->pb_buffer);
                     len = avio_close_dyn_buf(ctx->pb, &c->pb_buffer);
+                    ctx->pb = NULL;
                     c->cur_frame_bytes = len;
                     c->buffer_ptr = c->pb_buffer;
                     c->buffer_end = c->pb_buffer + len;
 
                     codec->frame_number++;
                     if (len == 0) {
-                        av_free_packet(&pkt);
+                        av_packet_unref(&pkt);
                         goto redo;
                     }
                 }
-                av_free_packet(&pkt);
+                av_packet_unref(&pkt);
             }
         }
         break;
@@ -2368,7 +2495,8 @@ static int http_prepare_data(HTTPContext *c)
 
 /* should convert the format at the same time */
 /* send data starting at c->buffer_ptr to the output connection
- * (either UDP or TCP) */
+ * (either UDP or TCP)
+ */
 static int http_send_data(HTTPContext *c)
 {
     int len, ret;
@@ -2449,8 +2577,8 @@ static int http_send_data(HTTPContext *c)
                         rtsp_c->packet_buffer_ptr += len;
                     if (rtsp_c->packet_buffer_ptr < rtsp_c->packet_buffer_end) {
                         /* if we could not send all the data, we will
-                           send it later, so a new state is needed to
-                           "lock" the RTSP TCP connection */
+                         * send it later, so a new state is needed to
+                         * "lock" the RTSP TCP connection */
                         rtsp_c->state = RTSPSTATE_SEND_PACKET;
                         break;
                     } else
@@ -2534,9 +2662,8 @@ static int http_start_receive_data(HTTPContext *c)
             http_log("Error reading write index from feed file '%s': %s\n",
                      c->stream->feed_filename, strerror(errno));
             return ret;
-        } else {
-            c->stream->feed_write_index = ret;
         }
+        c->stream->feed_write_index = ret;
     }
 
     c->stream->feed_write_index = FFMAX(ffm_read_write_index(fd),
@@ -2578,12 +2705,11 @@ static int http_receive_data(HTTPContext *c)
                 goto fail;
             c->buffer_ptr = c->buffer;
             break;
-        } else if (++loop_run > 10) {
+        } else if (++loop_run > 10)
             /* no chunk header, abort */
             goto fail;
-        } else {
+        else
             c->buffer_ptr++;
-        }
     }
 
     if (c->buffer_end > c->buffer_ptr) {
@@ -2616,7 +2742,7 @@ static int http_receive_data(HTTPContext *c)
     if (c->buffer_ptr >= c->buffer_end) {
         FFServerStream *feed = c->stream;
         /* a packet has been received : write it in the store, except
-           if header */
+         * if header */
         if (c->data_count > FFM_PACKET_SIZE) {
             /* XXX: use llseek or url_seek
              * XXX: Should probably fail? */
@@ -2797,7 +2923,7 @@ static int rtsp_parse_request(HTTPContext *c)
             len = sizeof(line) - 1;
         memcpy(line, p, len);
         line[len] = '\0';
-        ff_rtsp_parse_line(header, line, NULL, NULL);
+        ff_rtsp_parse_line(NULL, header, line, NULL, NULL);
         p = p1 + 1;
     }
 
@@ -2822,10 +2948,10 @@ static int rtsp_parse_request(HTTPContext *c)
  the_end:
     len = avio_close_dyn_buf(c->pb, &c->pb_buffer);
     c->pb = NULL; /* safety */
-    if (len < 0) {
+    if (len < 0)
         /* XXX: cannot do more */
         return -1;
-    }
+
     c->buffer_ptr = c->pb_buffer;
     c->buffer_end = c->pb_buffer + len;
     c->state = RTSPSTATE_SEND_REPLY;
@@ -2844,9 +2970,9 @@ static int prepare_sdp_description(FFServerStream *stream, uint8_t **pbuffer,
     *pbuffer = NULL;
 
     avc =  avformat_alloc_context();
-    if (!avc || !rtp_format) {
+    if (!avc || !rtp_format)
         return -1;
-    }
+
     avc->oformat = rtp_format;
     av_dict_set(&avc->metadata, "title",
                 entry ? entry->value : "No Title", 0);
@@ -2855,9 +2981,8 @@ static int prepare_sdp_description(FFServerStream *stream, uint8_t **pbuffer,
         snprintf(avc->filename, 1024, "rtp://%s:%d?multicast=1?ttl=%d",
                  inet_ntoa(stream->multicast_ip),
                  stream->multicast_port, stream->multicast_ttl);
-    } else {
+    } else
         snprintf(avc->filename, 1024, "rtp://0.0.0.0");
-    }
 
     avc->streams = av_malloc_array(avc->nb_streams, sizeof(*avc->streams));
     if (!avc->streams)
@@ -2887,7 +3012,7 @@ static int prepare_sdp_description(FFServerStream *stream, uint8_t **pbuffer,
 
 static void rtsp_cmd_options(HTTPContext *c, const char *url)
 {
-//    rtsp_reply_header(c, RTSP_STATUS_OK);
+    /* rtsp_reply_header(c, RTSP_STATUS_OK); */
     avio_printf(c->pb, "RTSP/1.0 %d %s\r\n", RTSP_STATUS_OK, "OK");
     avio_printf(c->pb, "CSeq: %d\r\n", c->seq);
     avio_printf(c->pb, "Public: %s\r\n",
@@ -3054,7 +3179,7 @@ static void rtsp_cmd_setup(HTTPContext *c, const char *url,
     }
 
     /* test if stream is OK (test needed because several SETUP needs
-       to be done for a given file) */
+     * to be done for a given file) */
     if (rtp_c->stream != stream) {
         rtsp_reply_error(c, RTSP_STATUS_SERVICE);
         return;
@@ -3115,8 +3240,10 @@ static void rtsp_cmd_setup(HTTPContext *c, const char *url,
 }
 
 
-/* find an RTP connection by using the session ID. Check consistency
-   with filename */
+/**
+ * find an RTP connection by using the session ID. Check consistency
+ * with filename
+ */
 static HTTPContext *find_rtp_session_with_url(const char *url,
                                               const char *session_id)
 {
@@ -3139,10 +3266,10 @@ static HTTPContext *find_rtp_session_with_url(const char *url,
     for(s=0; s<rtp_c->stream->nb_streams; ++s) {
       snprintf(buf, sizeof(buf), "%s/streamid=%d",
         rtp_c->stream->filename, s);
-      if(!strncmp(path, buf, sizeof(buf))) {
-    // XXX: Should we reply with RTSP_STATUS_ONLY_AGGREGATE if nb_streams>1?
+      if(!strncmp(path, buf, sizeof(buf)))
+        /* XXX: Should we reply with RTSP_STATUS_ONLY_AGGREGATE
+         * if nb_streams>1? */
         return rtp_c;
-      }
     }
     len = strlen(path);
     if (len > 0 && path[len - 1] == '/' &&
@@ -3220,7 +3347,7 @@ static HTTPContext *rtp_new_connection(struct sockaddr_in *from_addr,
     const char *proto_str;
 
     /* XXX: should output a warning page when coming
-       close to the connection limit */
+     * close to the connection limit */
     if (nb_connections >= config.nb_max_connections)
         goto fail;
 
@@ -3275,9 +3402,11 @@ static HTTPContext *rtp_new_connection(struct sockaddr_in *from_addr,
     return NULL;
 }
 
-/* add a new RTP stream in an RTP connection (used in RTSP SETUP
-   command). If RTP/TCP protocol is used, TCP connection 'rtsp_c' is
-   used. */
+/**
+ * add a new RTP stream in an RTP connection (used in RTSP SETUP
+ * command). If RTP/TCP protocol is used, TCP connection 'rtsp_c' is
+ * used.
+ */
 static int rtp_new_av_stream(HTTPContext *c,
                              int stream_index, struct sockaddr_in *dest_addr,
                              HTTPContext *rtsp_c)
@@ -3288,6 +3417,7 @@ static int rtp_new_av_stream(HTTPContext *c,
     URLContext *h = NULL;
     uint8_t *dummy_buf;
     int max_packet_size;
+    void *st_internal;
 
     /* now we can open the relevant output stream */
     ctx = avformat_alloc_context();
@@ -3295,14 +3425,13 @@ static int rtp_new_av_stream(HTTPContext *c,
         return -1;
     ctx->oformat = av_guess_format("rtp", NULL, NULL);
 
-    st = av_mallocz(sizeof(AVStream));
+    st = avformat_new_stream(ctx, NULL);
     if (!st)
         goto fail;
-    ctx->nb_streams = 1;
-    ctx->streams = av_mallocz_array(ctx->nb_streams, sizeof(AVStream *));
-    if (!ctx->streams)
-      goto fail;
-    ctx->streams[0] = st;
+
+    av_freep(&st->codec);
+    av_freep(&st->info);
+    st_internal = st->internal;
 
     if (!c->stream->feed ||
         c->stream->feed == c->stream)
@@ -3312,6 +3441,7 @@ static int rtp_new_av_stream(HTTPContext *c,
                c->stream->feed->streams[c->stream->feed_streams[stream_index]],
                sizeof(AVStream));
     st->priv_data = NULL;
+    st->internal = st_internal;
 
     /* build destination RTP address */
     ipaddr = inet_ntoa(dest_addr->sin_addr);
@@ -3355,10 +3485,10 @@ static int rtp_new_av_stream(HTTPContext *c,
 
     /* normally, no packets should be output here, but the packet size may
      * be checked */
-    if (ffio_open_dyn_packet_buf(&ctx->pb, max_packet_size) < 0) {
+    if (ffio_open_dyn_packet_buf(&ctx->pb, max_packet_size) < 0)
         /* XXX: close stream */
         goto fail;
-    }
+
     if (avformat_write_header(ctx, NULL) < 0) {
     fail:
         if (h)
@@ -3368,6 +3498,7 @@ static int rtp_new_av_stream(HTTPContext *c,
         return -1;
     }
     avio_close_dyn_buf(ctx->pb, &dummy_buf);
+    ctx->pb = NULL;
     av_free(dummy_buf);
 
     c->rtp_ctx[stream_index] = ctx;
@@ -3377,6 +3508,7 @@ static int rtp_new_av_stream(HTTPContext *c,
 /********************************************************************/
 /* ffserver initialization */
 
+/* FIXME: This code should use avformat_new_stream() */
 static AVStream *add_av_stream1(FFServerStream *stream,
                                 AVCodecContext *codec, int copy)
 {
@@ -3395,13 +3527,14 @@ static AVStream *add_av_stream1(FFServerStream *stream,
             return NULL;
         }
         avcodec_copy_context(fst->codec, codec);
-    } else {
+    } else
         /* live streams must use the actual feed's codec since it may be
          * updated later to carry extradata needed by them.
          */
         fst->codec = codec;
-    }
+
     fst->priv_data = av_mallocz(sizeof(FeedData));
+    fst->internal = av_mallocz(sizeof(*fst->internal));
     fst->index = stream->nb_streams;
     avpriv_set_pts_info(fst, 33, 1, 90000);
     fst->sample_aspect_ratio = codec->sample_aspect_ratio;
@@ -3502,7 +3635,7 @@ static void extract_mpeg4_header(AVFormatContext *infile)
                 if (p[0] == 0x00 && p[1] == 0x00 &&
                     p[2] == 0x01 && p[3] == 0xb6) {
                     size = p - pkt.data;
-                    st->codec->extradata = av_mallocz(size + FF_INPUT_BUFFER_PADDING_SIZE);
+                    st->codec->extradata = av_mallocz(size + AV_INPUT_BUFFER_PADDING_SIZE);
                     st->codec->extradata_size = size;
                     memcpy(st->codec->extradata, pkt.data, size);
                     break;
@@ -3511,199 +3644,222 @@ static void extract_mpeg4_header(AVFormatContext *infile)
             }
             mpeg4_count--;
         }
-        av_free_packet(&pkt);
+        av_packet_unref(&pkt);
     }
 }
 
 /* compute the needed AVStream for each file */
 static void build_file_streams(void)
 {
-    FFServerStream *stream, *stream_next;
+    FFServerStream *stream;
+    AVFormatContext *infile;
     int i, ret;
 
     /* gather all streams */
-    for(stream = config.first_stream; stream; stream = stream_next) {
-        AVFormatContext *infile = NULL;
-        stream_next = stream->next;
-        if (stream->stream_type == STREAM_TYPE_LIVE &&
-            !stream->feed) {
-            /* the stream comes from a file */
-            /* try to open the file */
-            /* open stream */
-            if (stream->fmt && !strcmp(stream->fmt->name, "rtp")) {
-                /* specific case : if transport stream output to RTP,
-                   we use a raw transport stream reader */
-                av_dict_set(&stream->in_opts, "mpeg2ts_compute_pcr", "1", 0);
-            }
+    for(stream = config.first_stream; stream; stream = stream->next) {
+        infile = NULL;
 
-            if (!stream->feed_filename[0]) {
-                http_log("Unspecified feed file for stream '%s'\n",
-                         stream->filename);
+        if (stream->stream_type != STREAM_TYPE_LIVE || stream->feed)
+            continue;
+
+        /* the stream comes from a file */
+        /* try to open the file */
+        /* open stream */
+
+
+        /* specific case: if transport stream output to RTP,
+         * we use a raw transport stream reader */
+        if (stream->fmt && !strcmp(stream->fmt->name, "rtp"))
+            av_dict_set(&stream->in_opts, "mpeg2ts_compute_pcr", "1", 0);
+
+        if (!stream->feed_filename[0]) {
+            http_log("Unspecified feed file for stream '%s'\n",
+                     stream->filename);
+            goto fail;
+        }
+
+        http_log("Opening feed file '%s' for stream '%s'\n",
+                 stream->feed_filename, stream->filename);
+
+        ret = avformat_open_input(&infile, stream->feed_filename,
+                                  stream->ifmt, &stream->in_opts);
+        if (ret < 0) {
+            http_log("Could not open '%s': %s\n", stream->feed_filename,
+                     av_err2str(ret));
+            /* remove stream (no need to spend more time on it) */
+        fail:
+            remove_stream(stream);
+        } else {
+            /* find all the AVStreams inside and reference them in
+             * 'stream' */
+            if (avformat_find_stream_info(infile, NULL) < 0) {
+                http_log("Could not find codec parameters from '%s'\n",
+                         stream->feed_filename);
+                avformat_close_input(&infile);
                 goto fail;
             }
+            extract_mpeg4_header(infile);
 
-            http_log("Opening feed file '%s' for stream '%s'\n",
-                     stream->feed_filename, stream->filename);
-            ret = avformat_open_input(&infile, stream->feed_filename,
-                                      stream->ifmt, &stream->in_opts);
-            if (ret < 0) {
-                http_log("Could not open '%s': %s\n", stream->feed_filename,
-                         av_err2str(ret));
-                /* remove stream (no need to spend more time on it) */
-            fail:
-                remove_stream(stream);
-            } else {
-                /* find all the AVStreams inside and reference them in
-                   'stream' */
-                if (avformat_find_stream_info(infile, NULL) < 0) {
-                    http_log("Could not find codec parameters from '%s'\n",
-                             stream->feed_filename);
-                    avformat_close_input(&infile);
-                    goto fail;
-                }
-                extract_mpeg4_header(infile);
+            for(i=0;i<infile->nb_streams;i++)
+                add_av_stream1(stream, infile->streams[i]->codec, 1);
 
-                for(i=0;i<infile->nb_streams;i++)
-                    add_av_stream1(stream, infile->streams[i]->codec, 1);
-
-                avformat_close_input(&infile);
-            }
+            avformat_close_input(&infile);
         }
     }
 }
 
+static inline
+int check_codec_match(AVCodecContext *ccf, AVCodecContext *ccs, int stream)
+{
+    int matches = 1;
+
+#define CHECK_CODEC(x)  (ccf->x != ccs->x)
+    if (CHECK_CODEC(codec_id) || CHECK_CODEC(codec_type)) {
+        http_log("Codecs do not match for stream %d\n", stream);
+        matches = 0;
+    } else if (CHECK_CODEC(bit_rate) || CHECK_CODEC(flags)) {
+        http_log("Codec bitrates do not match for stream %d\n", stream);
+        matches = 0;
+    } else if (ccf->codec_type == AVMEDIA_TYPE_VIDEO) {
+        if (CHECK_CODEC(time_base.den) ||
+            CHECK_CODEC(time_base.num) ||
+            CHECK_CODEC(width) ||
+            CHECK_CODEC(height)) {
+            http_log("Codec width, height or framerate do not match for stream %d\n", stream);
+            matches = 0;
+        }
+    } else if (ccf->codec_type == AVMEDIA_TYPE_AUDIO) {
+        if (CHECK_CODEC(sample_rate) ||
+            CHECK_CODEC(channels) ||
+            CHECK_CODEC(frame_size)) {
+            http_log("Codec sample_rate, channels, frame_size do not match for stream %d\n", stream);
+            matches = 0;
+        }
+    } else {
+        http_log("Unknown codec type for stream %d\n", stream);
+        matches = 0;
+    }
+
+    return matches;
+}
+
 /* compute the needed AVStream for each feed */
-static void build_feed_streams(void)
+static int build_feed_streams(void)
 {
     FFServerStream *stream, *feed;
-    int i;
+    int i, fd;
 
     /* gather all streams */
     for(stream = config.first_stream; stream; stream = stream->next) {
         feed = stream->feed;
-        if (feed) {
-            if (stream->is_feed) {
-                for(i=0;i<stream->nb_streams;i++)
-                    stream->feed_streams[i] = i;
-            } else {
-                /* we handle a stream coming from a feed */
-                for(i=0;i<stream->nb_streams;i++)
-                    stream->feed_streams[i] = add_av_stream(feed,
-                                                            stream->streams[i]);
-            }
+        if (!feed)
+            continue;
+
+        if (stream->is_feed) {
+            for(i=0;i<stream->nb_streams;i++)
+                stream->feed_streams[i] = i;
+            continue;
         }
+        /* we handle a stream coming from a feed */
+        for(i=0;i<stream->nb_streams;i++)
+            stream->feed_streams[i] = add_av_stream(feed, stream->streams[i]);
     }
 
     /* create feed files if needed */
     for(feed = config.first_feed; feed; feed = feed->next_feed) {
-        int fd;
 
         if (avio_check(feed->feed_filename, AVIO_FLAG_READ) > 0) {
-            /* See if it matches */
             AVFormatContext *s = NULL;
             int matches = 0;
 
-            if (avformat_open_input(&s, feed->feed_filename, NULL, NULL) >= 0) {
-                /* set buffer size */
-                int ret = ffio_set_buf_size(s->pb, FFM_PACKET_SIZE);
-                if (ret < 0) {
-                    http_log("Failed to set buffer size\n");
-                    exit(1);
+            /* See if it matches */
+
+            if (avformat_open_input(&s, feed->feed_filename, NULL, NULL) < 0) {
+                http_log("Deleting feed file '%s' as it appears "
+                            "to be corrupt\n",
+                         feed->feed_filename);
+                goto drop;
+            }
+
+            /* set buffer size */
+            if (ffio_set_buf_size(s->pb, FFM_PACKET_SIZE) < 0) {
+                http_log("Failed to set buffer size\n");
+                avformat_close_input(&s);
+                goto bail;
+            }
+
+            /* Now see if it matches */
+            if (s->nb_streams != feed->nb_streams) {
+                http_log("Deleting feed file '%s' as stream counts "
+                            "differ (%d != %d)\n",
+                         feed->feed_filename, s->nb_streams, feed->nb_streams);
+                goto drop;
+            }
+
+            matches = 1;
+            for(i=0;i<s->nb_streams;i++) {
+                AVStream *sf, *ss;
+
+                sf = feed->streams[i];
+                ss = s->streams[i];
+
+                if (sf->index != ss->index || sf->id != ss->id) {
+                    http_log("Index & Id do not match for stream %d (%s)\n",
+                             i, feed->feed_filename);
+                    matches = 0;
+                    break;
                 }
 
-                /* Now see if it matches */
-                if (s->nb_streams == feed->nb_streams) {
-                    matches = 1;
-                    for(i=0;i<s->nb_streams;i++) {
-                        AVStream *sf, *ss;
-                        sf = feed->streams[i];
-                        ss = s->streams[i];
+                matches = check_codec_match (sf->codec, ss->codec, i);
+                if (!matches)
+                    break;
+            }
 
-                        if (sf->index != ss->index ||
-                            sf->id != ss->id) {
-                            http_log("Index & Id do not match for stream %d (%s)\n",
-                                   i, feed->feed_filename);
-                            matches = 0;
-                        } else {
-                            AVCodecContext *ccf, *ccs;
-
-                            ccf = sf->codec;
-                            ccs = ss->codec;
-#define CHECK_CODEC(x)  (ccf->x != ccs->x)
-
-                            if (CHECK_CODEC(codec_id) || CHECK_CODEC(codec_type)) {
-                                http_log("Codecs do not match for stream %d\n", i);
-                                matches = 0;
-                            } else if (CHECK_CODEC(bit_rate) || CHECK_CODEC(flags)) {
-                                http_log("Codec bitrates do not match for stream %d\n", i);
-                                matches = 0;
-                            } else if (ccf->codec_type == AVMEDIA_TYPE_VIDEO) {
-                                if (CHECK_CODEC(time_base.den) ||
-                                    CHECK_CODEC(time_base.num) ||
-                                    CHECK_CODEC(width) ||
-                                    CHECK_CODEC(height)) {
-                                    http_log("Codec width, height and framerate do not match for stream %d\n", i);
-                                    matches = 0;
-                                }
-                            } else if (ccf->codec_type == AVMEDIA_TYPE_AUDIO) {
-                                if (CHECK_CODEC(sample_rate) ||
-                                    CHECK_CODEC(channels) ||
-                                    CHECK_CODEC(frame_size)) {
-                                    http_log("Codec sample_rate, channels, frame_size do not match for stream %d\n", i);
-                                    matches = 0;
-                                }
-                            } else {
-                                http_log("Unknown codec type\n");
-                                matches = 0;
-                            }
-                        }
-                        if (!matches)
-                            break;
-                    }
-                } else
-                    http_log("Deleting feed file '%s' as stream counts differ (%d != %d)\n",
-                        feed->feed_filename, s->nb_streams, feed->nb_streams);
-
+drop:
+            if (s)
                 avformat_close_input(&s);
-            } else
-                http_log("Deleting feed file '%s' as it appears to be corrupt\n",
-                        feed->feed_filename);
 
             if (!matches) {
                 if (feed->readonly) {
-                    http_log("Unable to delete feed file '%s' as it is marked readonly\n",
-                        feed->feed_filename);
-                    exit(1);
+                    http_log("Unable to delete read-only feed file '%s'\n",
+                             feed->feed_filename);
+                    goto bail;
                 }
                 unlink(feed->feed_filename);
             }
         }
+
         if (avio_check(feed->feed_filename, AVIO_FLAG_WRITE) <= 0) {
             AVFormatContext *s = avformat_alloc_context();
 
             if (!s) {
                 http_log("Failed to allocate context\n");
-                exit(1);
+                goto bail;
             }
 
             if (feed->readonly) {
-                http_log("Unable to create feed file '%s' as it is marked readonly\n",
-                    feed->feed_filename);
-                exit(1);
+                http_log("Unable to create feed file '%s' as it is "
+                            "marked readonly\n",
+                         feed->feed_filename);
+                avformat_free_context(s);
+                goto bail;
             }
 
             /* only write the header of the ffm file */
             if (avio_open(&s->pb, feed->feed_filename, AVIO_FLAG_WRITE) < 0) {
                 http_log("Could not open output feed file '%s'\n",
                          feed->feed_filename);
-                exit(1);
+                avformat_free_context(s);
+                goto bail;
             }
             s->oformat = feed->fmt;
             s->nb_streams = feed->nb_streams;
             s->streams = feed->streams;
             if (avformat_write_header(s, NULL) < 0) {
                 http_log("Container doesn't support the required parameters\n");
-                exit(1);
+                avio_closep(&s->pb);
+                avformat_free_context(s);
+                goto bail;
             }
             /* XXX: need better API */
             av_freep(&s->priv_data);
@@ -3712,15 +3868,17 @@ static void build_feed_streams(void)
             s->nb_streams = 0;
             avformat_free_context(s);
         }
+
         /* get feed size and write index */
         fd = open(feed->feed_filename, O_RDONLY);
         if (fd < 0) {
             http_log("Could not open output feed file '%s'\n",
                     feed->feed_filename);
-            exit(1);
+            goto bail;
         }
 
-        feed->feed_write_index = FFMAX(ffm_read_write_index(fd), FFM_PACKET_SIZE);
+        feed->feed_write_index = FFMAX(ffm_read_write_index(fd),
+                                       FFM_PACKET_SIZE);
         feed->feed_size = lseek(fd, 0, SEEK_END);
         /* ensure that we do not wrap before the end of file */
         if (feed->feed_max_size && feed->feed_max_size < feed->feed_size)
@@ -3728,6 +3886,10 @@ static void build_feed_streams(void)
 
         close(fd);
     }
+    return 0;
+
+bail:
+    return -1;
 }
 
 /* compute the bandwidth used by each stream */
@@ -3758,23 +3920,25 @@ static void handle_child_exit(int sig)
 {
     pid_t pid;
     int status;
+    time_t uptime;
 
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
         FFServerStream *feed;
 
         for (feed = config.first_feed; feed; feed = feed->next) {
-            if (feed->pid == pid) {
-                int uptime = time(0) - feed->pid_start;
+            if (feed->pid != pid)
+                continue;
 
-                feed->pid = 0;
-                fprintf(stderr,
-                        "%s: Pid %d exited with status %d after %d seconds\n",
-                        feed->filename, pid, status, uptime);
+            uptime = time(0) - feed->pid_start;
+            feed->pid = 0;
+            fprintf(stderr,
+                    "%s: Pid %"PRId64" exited with status %d after %"PRId64" "
+                        "seconds\n",
+                    feed->filename, (int64_t) pid, status, (int64_t)uptime);
 
-                if (uptime < 30)
-                    /* Turn off any more restarts */
-                    ffserver_free_child_args(&feed->child_argv);
-            }
+            if (uptime < 30)
+                /* Turn off any more restarts */
+                ffserver_free_child_args(&feed->child_argv);
         }
     }
 
@@ -3806,7 +3970,9 @@ static const OptionDef options[] = {
 int main(int argc, char **argv)
 {
     struct sigaction sigact = { { 0 } };
-    int ret = 0;
+    int cfg_parsed;
+    int ret = EXIT_FAILURE;
+
 
     config.filename = av_strdup("/etc/ffserver.conf");
 
@@ -3828,12 +3994,11 @@ int main(int argc, char **argv)
     sigact.sa_flags = SA_NOCLDSTOP | SA_RESTART;
     sigaction(SIGCHLD, &sigact, 0);
 
-    if ((ret = ffserver_parse_ffconfig(config.filename, &config)) < 0) {
+    if ((cfg_parsed = ffserver_parse_ffconfig(config.filename, &config)) < 0) {
         fprintf(stderr, "Error reading configuration file '%s': %s\n",
-                config.filename, av_err2str(ret));
-        exit(1);
+                config.filename, av_err2str(cfg_parsed));
+        goto bail;
     }
-    av_freep(&config.filename);
 
     /* open log file if needed */
     if (config.logfilename[0] != '\0') {
@@ -3846,7 +4011,10 @@ int main(int argc, char **argv)
 
     build_file_streams();
 
-    build_feed_streams();
+    if (build_feed_streams() < 0) {
+        http_log("Could not setup feed streams\n");
+        goto bail;
+    }
 
     compute_bandwidth();
 
@@ -3855,8 +4023,13 @@ int main(int argc, char **argv)
 
     if (http_server() < 0) {
         http_log("Could not start server\n");
-        exit(1);
+        goto bail;
     }
 
-    return 0;
+    ret=EXIT_SUCCESS;
+
+bail:
+    av_freep (&config.filename);
+    avformat_network_deinit();
+    return ret;
 }

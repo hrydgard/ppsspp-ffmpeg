@@ -623,6 +623,7 @@ static int flac_decode_frame(AVCodecContext *avctx, void *data,
     return bytes_read;
 }
 
+#if HAVE_THREADS
 static int init_thread_copy(AVCodecContext *avctx)
 {
     FLACContext *s = avctx->priv_data;
@@ -633,6 +634,7 @@ static int init_thread_copy(AVCodecContext *avctx)
         return allocate_buffers(s);
     return 0;
 }
+#endif
 
 static av_cold int flac_decode_close(AVCodecContext *avctx)
 {
@@ -644,7 +646,7 @@ static av_cold int flac_decode_close(AVCodecContext *avctx)
 }
 
 static const AVOption options[] = {
-{ "use_buggy_lpc", "emulate old buggy lavc behavior", offsetof(FLACContext, buggy_lpc), AV_OPT_TYPE_INT, {.i64 = 0 }, 0, 1, AV_OPT_FLAG_DECODING_PARAM | AV_OPT_FLAG_AUDIO_PARAM },
+{ "use_buggy_lpc", "emulate old buggy lavc behavior", offsetof(FLACContext, buggy_lpc), AV_OPT_TYPE_BOOL, {.i64 = 0 }, 0, 1, AV_OPT_FLAG_DECODING_PARAM | AV_OPT_FLAG_AUDIO_PARAM },
 { NULL },
 };
 
@@ -665,7 +667,7 @@ AVCodec ff_flac_decoder = {
     .close          = flac_decode_close,
     .decode         = flac_decode_frame,
     .init_thread_copy = ONLY_IF_THREADS_ENABLED(init_thread_copy),
-    .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_FRAME_THREADS,
+    .capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
     .sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S16,
                                                       AV_SAMPLE_FMT_S16P,
                                                       AV_SAMPLE_FMT_S32,

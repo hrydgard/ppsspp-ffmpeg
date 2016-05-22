@@ -194,7 +194,7 @@ static int write_representation(AVFormatContext *s, AVStream *stream, char *id,
         avio_printf(s->pb, " width=\"%d\"", stream->codec->width);
     if (stream->codec->codec_type == AVMEDIA_TYPE_VIDEO && output_height)
         avio_printf(s->pb, " height=\"%d\"", stream->codec->height);
-    if (stream->codec->codec_type = AVMEDIA_TYPE_AUDIO && output_sample_rate)
+    if (stream->codec->codec_type == AVMEDIA_TYPE_AUDIO && output_sample_rate)
         avio_printf(s->pb, " audioSamplingRate=\"%d\"", stream->codec->sample_rate);
     if (w->is_live) {
         // For live streams, Codec and Mime Type always go in the Representation tag.
@@ -392,10 +392,10 @@ static int write_adaptation_set(AVFormatContext *s, int as_index)
         if (w->is_live) {
             AVDictionaryEntry *filename =
                 av_dict_get(s->streams[as->streams[i]]->metadata, FILENAME, NULL, 0);
-            if (!filename ||
-                (ret = parse_filename(filename->value, &representation_id, NULL, NULL))) {
+            if (!filename)
+                return AVERROR(EINVAL);
+            if (ret = parse_filename(filename->value, &representation_id, NULL, NULL))
                 return ret;
-            }
         } else {
             representation_id = av_asprintf("%d", w->representation_id++);
             if (!representation_id) return AVERROR(ENOMEM);
@@ -518,8 +518,8 @@ static int webm_dash_manifest_write_trailer(AVFormatContext *s)
 #define OFFSET(x) offsetof(WebMDashMuxContext, x)
 static const AVOption options[] = {
     { "adaptation_sets", "Adaptation sets. Syntax: id=0,streams=0,1,2 id=1,streams=3,4 and so on", OFFSET(adaptation_sets), AV_OPT_TYPE_STRING, { 0 }, 0, 0, AV_OPT_FLAG_ENCODING_PARAM },
-    { "debug_mode", "[private option - users should never set this]. set this to 1 to create deterministic output", OFFSET(debug_mode), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM },
-    { "live", "set this to 1 to create a live stream manifest", OFFSET(is_live), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM },
+    { "debug_mode", "[private option - users should never set this]. Create deterministic output", OFFSET(debug_mode), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM },
+    { "live", "create a live stream manifest", OFFSET(is_live), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM },
     { "chunk_start_index",  "start index of the chunk", OFFSET(chunk_start_index), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM },
     { "chunk_duration_ms", "duration of each chunk (in milliseconds)", OFFSET(chunk_duration), AV_OPT_TYPE_INT, {.i64 = 1000}, 0, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM },
     { "utc_timing_url", "URL of the page that will return the UTC timestamp in ISO format", OFFSET(utc_timing_url), AV_OPT_TYPE_STRING, { 0 }, 0, 0, AV_OPT_FLAG_ENCODING_PARAM },

@@ -84,29 +84,34 @@ runecho(){
 }
 
 probefmt(){
-    run ffprobe -show_entries format=format_name -print_format default=nw=1:nk=1 -v 0 "$@"
+    run ffprobe${PROGSUF} -show_entries format=format_name -print_format default=nw=1:nk=1 -v 0 "$@"
+}
+
+runlocal(){
+    test "${V:-0}" -gt 0 && echo ${base}/"$@" ${base} >&3
+    ${base}/"$@" ${base}
 }
 
 probeframes(){
-    run ffprobe -show_frames -v 0 "$@"
+    run ffprobe${PROGSUF} -show_frames -v 0 "$@"
 }
 
 ffmpeg(){
     dec_opts="-hwaccel $hwaccel -threads $threads -thread_type $thread_type"
-    ffmpeg_args="-nostats -cpuflags $cpuflags"
+    ffmpeg_args="-nostdin -nostats -cpuflags $cpuflags"
     for arg in $@; do
         [ x${arg} = x-i ] && ffmpeg_args="${ffmpeg_args} ${dec_opts}"
         ffmpeg_args="${ffmpeg_args} ${arg}"
     done
-    run ffmpeg ${ffmpeg_args}
+    run ffmpeg${PROGSUF} ${ffmpeg_args}
 }
 
 framecrc(){
-    ffmpeg "$@" -flags +bitexact -f framecrc -
+    ffmpeg "$@" -flags +bitexact -fflags +bitexact -f framecrc -
 }
 
 framemd5(){
-    ffmpeg "$@" -flags +bitexact -f framemd5 -
+    ffmpeg "$@" -flags +bitexact -fflags +bitexact -f framemd5 -
 }
 
 crc(){
@@ -124,7 +129,7 @@ pcm(){
 fmtstdout(){
     fmt=$1
     shift 1
-    ffmpeg -flags +bitexact "$@" -f $fmt -
+    ffmpeg -flags +bitexact -fflags +bitexact "$@" -f $fmt -
 }
 
 enc_dec_pcm(){
@@ -137,7 +142,7 @@ enc_dec_pcm(){
     cleanfiles=$encfile
     encfile=$(target_path ${encfile})
     ffmpeg -i $src_file "$@" -f $out_fmt -y ${encfile} || return
-    ffmpeg -flags +bitexact -i ${encfile} -c:a pcm_${pcm_fmt} -f ${dec_fmt} -
+    ffmpeg -flags +bitexact -fflags +bitexact -i ${encfile} -c:a pcm_${pcm_fmt} -fflags +bitexact -f ${dec_fmt} -
 }
 
 FLAGS="-flags +bitexact -sws_flags +accurate_rnd+bitexact -fflags +bitexact"
@@ -231,17 +236,37 @@ gapless(){
     cleanfiles="$cleanfiles $decfile1 $decfile2 $decfile3"
 
     # test packet data
-    ffmpeg $extra_args -i "$sample" -flags +bitexact -c:a copy -f framecrc -y $decfile1
+    ffmpeg $extra_args -i "$sample" -flags +bitexact -fflags +bitexact -c:a copy -f framecrc -y $decfile1
     do_md5sum $decfile1
     # test decoded (and cut) data
-    ffmpeg $extra_args -i "$sample" -flags +bitexact -f wav md5:
+    ffmpeg $extra_args -i "$sample" -flags +bitexact -fflags +bitexact -f wav md5:
     # the same as above again, with seeking to the start
-    ffmpeg $extra_args -ss 0 -seek_timestamp 1 -i "$sample" -flags +bitexact -c:a copy -f framecrc -y $decfile2
+    ffmpeg $extra_args -ss 0 -seek_timestamp 1 -i "$sample" -flags +bitexact -fflags +bitexact -c:a copy -f framecrc -y $decfile2
     do_md5sum $decfile2
-    ffmpeg $extra_args -ss 0 -seek_timestamp 1 -i "$sample" -flags +bitexact -f wav md5:
+    ffmpeg $extra_args -ss 0 -seek_timestamp 1 -i "$sample" -flags +bitexact -fflags +bitexact -f wav md5:
     # test packet data, with seeking to a specific position
-    ffmpeg $extra_args -ss 5 -seek_timestamp 1 -i "$sample" -flags +bitexact -c:a copy -f framecrc -y $decfile3
+    ffmpeg $extra_args -ss 5 -seek_timestamp 1 -i "$sample" -flags +bitexact -fflags +bitexact -c:a copy -f framecrc -y $decfile3
     do_md5sum $decfile3
+}
+
+concat(){
+    template=$1
+    sample=$2
+    mode=$3
+    extra_args=$4
+
+    concatfile="${outdir}/${test}.ffconcat"
+    packetfile="${outdir}/${test}.ffprobe"
+    cleanfiles="$concatfile $packetfile"
+
+    awk "{gsub(/%SRCFILE%/, \"$sample\"); print}" $template > $concatfile
+
+    if [ "$mode" = "md5" ]; then
+        run ffprobe${PROGSUF} -bitexact -show_streams -show_packets -v 0 -fflags keepside -safe 0 $extra_args $concatfile | tr -d '\r' > $packetfile
+        do_md5sum $packetfile
+    else
+        run ffprobe${PROGSUF} -bitexact -show_streams -show_packets -v 0 -of compact=p=0:nk=1 -fflags keepside -safe 0 $extra_args $concatfile
+    fi
 }
 
 mkdir -p "$outdir"
