@@ -2,13 +2,21 @@
 #Change NDK to your Android NDK location
 NDK=/c/AndroidNDK
 PLATFORM=$NDK/platforms/android-14/arch-x86/
-PREBUILT=$NDK/toolchains/x86-4.6/prebuilt/windows-x86_64
+PREBUILT=$NDK/toolchains/x86-4.9/prebuilt/windows-x86_64
+PREBUILTLLVM=$NDK/toolchains/llvm/prebuilt/windows-x86_64
 
+set -e
+
+# The --disable asm flag is very unfrotunate here and only needed for x86.
+# This is now required because text relocations are no longer allowed on Android.
 GENERAL="\
    --enable-cross-compile \
-   --extra-libs="-lgcc" \
-   --cc=$PREBUILT/bin/i686-linux-android-gcc \
+   --enable-pic \
+   --disable-asm \
+   --extra-libs="-latomic" \
+   --cc=$PREBUILTLLVM/bin/clang \
    --cross-prefix=$PREBUILT/bin/i686-linux-android- \
+   --ld=$PREBUILTLLVM/bin/clang \
    --nm=$PREBUILT/bin/i686-linux-android-nm"
 
 MODULES="\
@@ -78,10 +86,10 @@ function build_x86
     --arch=x86 \
     ${GENERAL} \
     --sysroot=$PLATFORM \
-    --extra-cflags=" -O3 -DANDROID -Dipv6mr_interface=ipv6mr_ifindex -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -fomit-frame-pointer -march=k8" \
+    --extra-cflags=" --target=i686-linux-android -O3 -DANDROID -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -fomit-frame-pointer -march=k8" \
     --disable-shared \
     --enable-static \
-    --extra-ldflags="-Wl,-rpath-link=$PLATFORM/usr/lib -L$PLATFORM/usr/lib -nostdlib -lc -lm -ldl -llog" \
+    --extra-ldflags=" -B$PREBUILT/bin/i686-linux-android- --target=i686-linux-android -Wl,--rpath-link,$PLATFORM/usr/lib -L$PLATFORM/usr/lib -L$PREBUILT/i686-linux-android/lib -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
     --disable-everything \
     ${MODULES} \
@@ -90,11 +98,11 @@ function build_x86
     ${VIDEO_ENCODERS} \
     ${AUDIO_ENCODERS} \
     ${DEMUXERS} \
-		${MUXERS} \
+    ${MUXERS} \
     ${PARSERS}
 
 make clean
-make install
+make -j4 install
 }
 
 build_x86
