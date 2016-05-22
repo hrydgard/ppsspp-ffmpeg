@@ -3,6 +3,8 @@
 rm -f config.h
 echo "Building for Linux"
 
+set -e
+
 ARCH="x86"
 
 GENERAL="

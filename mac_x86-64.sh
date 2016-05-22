@@ -3,6 +3,8 @@
 rm config.h
 echo "Building for MacOSX"
 
+set -e
+
 ARCH="x86_64"
 
 GENERAL="

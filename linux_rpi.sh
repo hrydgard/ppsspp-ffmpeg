@@ -4,6 +4,8 @@ echo "For right build u must have installed CrossTool-ng tools"
 echo "WARNING! CrossTool must be compiled for hard float!!!"
 ARCH=$(uname -m)
 
+set -e
+
 if [ "$ARCH" == "armv7l" ]; then
 	echo "U cant compile FFMPEG on Raspberry! I must compile on any Linux distr."
 	exit

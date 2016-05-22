@@ -2,6 +2,8 @@
 #build ffmpeg for armv7,armv7s and uses lipo to create fat libraries and deletes the originals
 PLATFORM=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/
 
+set -e
+
 GENERAL="\
    --enable-cross-compile \
    --arch=arm \

@@ -12,6 +12,8 @@ COMPILERROOT=~/Downloads/tools/gcc4.8.3_x86-64
 EPOCLIB=$EPOCROOT/epoc32/release/armv5
 EPOCINC=$EPOCROOT/epoc32/include
 
+set -e
+
 GENERAL="\
    --enable-cross-compile \
    --arch=armv6zk \

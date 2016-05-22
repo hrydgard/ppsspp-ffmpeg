@@ -3,6 +3,8 @@
 rm config.h
 echo "Building for Linux"
 
+set -e
+
 ARCH="mips32"
 
 #   --enable-cross-compile \

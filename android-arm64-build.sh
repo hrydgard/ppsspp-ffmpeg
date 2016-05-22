@@ -4,6 +4,8 @@ NDK=/c/AndroidNDK
 PLATFORM=$NDK/platforms/android-21/arch-arm64/
 PREBUILT=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/windows-x86_64
 
+set -e
+
 GENERAL="\
    --enable-cross-compile \
    --extra-libs="-lgcc" \

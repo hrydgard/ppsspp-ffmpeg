@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 GENERAL="\
    --enable-cross-compile \
    --extra-libs="-lgcc" \
