@@ -1,17 +1,20 @@
 #!/bin/bash
 #Change NDK to your Android NDK location
 NDK=/c/AndroidNDK
-PLATFORM=$NDK/platforms/android-8/arch-arm/
-PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.8/prebuilt/windows-x86_64
+PLATFORM=$NDK/platforms/android-9/arch-arm/
+PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.9/prebuilt/windows-x86_64
+PREBUILTLLVM=$NDK/toolchains/llvm/prebuilt/windows-x86_64
 
 set -e
 
 GENERAL="\
    --enable-cross-compile \
-   --extra-libs="-lgcc" \
+   --enable-pic \
+   --extra-libs="-latomic" \
    --arch=arm \
-   --cc=$PREBUILT/bin/arm-linux-androideabi-gcc \
+   --cc=$PREBUILTLLVM/bin/clang \
    --cross-prefix=$PREBUILT/bin/arm-linux-androideabi- \
+   --ld=$PREBUILTLLVM/bin/clang \
    --nm=$PREBUILT/bin/arm-linux-androideabi-nm"
 
 MODULES="\
@@ -83,10 +86,10 @@ function build_ARMv6
     --prefix=./android/armv6 \
     ${GENERAL} \
     --sysroot=$PLATFORM \
-    --extra-cflags=" -O3 -fpic -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfloat-abi=softfp -mfpu=vfp -marm -march=armv6" \
+    --extra-cflags=" --target=arm-linux-androideabi -O3 -DANDROID -fpic -fasm -fno-short-enums -fno-strict-aliasing -mfloat-abi=softfp -mfpu=vfp -marm -march=armv6" \
     --disable-shared \
     --enable-static \
-    --extra-ldflags="-Wl,-rpath-link=$PLATFORM/usr/lib -L$PLATFORM/usr/lib -nostdlib -lc -lm -ldl -llog" \
+    --extra-ldflags=" -B$PREBUILT/bin/arm-linux-androideabi- --target=arm-linux-androideabi -Wl,--rpath-link,$PLATFORM/usr/lib -L$PLATFORM/usr/lib -L$PREBUILT/arm-linux-androideabi/lib -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
     --disable-everything \
     ${MODULES} \
@@ -100,7 +103,7 @@ function build_ARMv6
     --disable-neon
 
 make clean
-make install
+make -j4 install
 }
 
 function build_ARMv7
@@ -109,12 +112,13 @@ function build_ARMv7
     --prefix=./android/armv7 \
     ${GENERAL} \
     --sysroot=$PLATFORM \
-    --extra-cflags=" -O3 -fpic -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfloat-abi=softfp -mfpu=vfp -marm -march=armv7-a" \
+    --extra-cflags=" --target=arm-linux-androideabi -O3 -DANDROID -fpic -fasm -fno-short-enums -fno-strict-aliasing -mfloat-abi=softfp -mfpu=vfp -marm -march=armv7-a" \
     --disable-shared \
     --enable-static \
-    --extra-ldflags="-Wl,-rpath-link=$PLATFORM/usr/lib -L$PLATFORM/usr/lib -nostdlib -lc -lm -ldl -llog" \
+    --extra-ldflags=" -B$PREBUILT/bin/arm-linux-androideabi- --target=arm-linux-androideabi -Wl,--rpath-link,$PLATFORM/usr/lib -L$PLATFORM/usr/lib -L$PREBUILT/arm-linux-androideabi/lib -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
     --disable-everything \
+    --enable-runtime-cpudetect \
     ${MODULES} \
     ${VIDEO_DECODERS} \
     ${AUDIO_DECODERS} \
@@ -122,11 +126,10 @@ function build_ARMv7
     ${AUDIO_ENCODERS} \
     ${DEMUXERS} \
     ${MUXERS} \
-    ${PARSERS} \
-    --disable-neon \
+    ${PARSERS}
 
 make clean
-make install
+make -j4 install
 }
 
 build_ARMv6
