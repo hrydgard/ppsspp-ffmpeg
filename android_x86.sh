@@ -1,9 +1,15 @@
 #!/bin/bash
 #Change NDK to your Android NDK location
-NDK=/c/AndroidNDK
-PLATFORM=$NDK/platforms/android-14/arch-x86/
-PREBUILT=$NDK/toolchains/x86-4.9/prebuilt/windows-x86_64
-PREBUILTLLVM=$NDK/toolchains/llvm/prebuilt/windows-x86_64
+if [ "$NDK" = "" ]; then
+    NDK=/c/AndroidNDK
+fi
+if [ "$NDK_PLATFORM" = "" ]; then
+    NDK_PLATFORM=$NDK/platforms/android-14/arch-x86
+fi
+if [ "$NDK_PREBUILT" = "" ]; then
+    NDK_PREBUILT=$NDK/toolchains/x86-4.9/prebuilt/windows-x86_64
+    NDK_PREBUILTLLVM=$NDK/toolchains/llvm/prebuilt/windows-x86_64
+fi
 
 set -e
 
@@ -14,10 +20,10 @@ GENERAL="\
    --enable-pic \
    --disable-asm \
    --extra-libs="-latomic" \
-   --cc=$PREBUILTLLVM/bin/clang \
-   --cross-prefix=$PREBUILT/bin/i686-linux-android- \
-   --ld=$PREBUILTLLVM/bin/clang \
-   --nm=$PREBUILT/bin/i686-linux-android-nm"
+   --cc=$NDK_PREBUILTLLVM/bin/clang \
+   --cross-prefix=$NDK_PREBUILT/bin/i686-linux-android- \
+   --ld=$NDK_PREBUILTLLVM/bin/clang \
+   --nm=$NDK_PREBUILT/bin/i686-linux-android-nm"
 
 MODULES="\
    --disable-avdevice \
@@ -85,11 +91,11 @@ function build_x86
     --prefix=./android/x86 \
     --arch=x86 \
     ${GENERAL} \
-    --sysroot=$PLATFORM \
+    --sysroot=$NDK_PLATFORM \
     --extra-cflags=" --target=i686-linux-android -O3 -DANDROID -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -fomit-frame-pointer -march=k8" \
     --disable-shared \
     --enable-static \
-    --extra-ldflags=" -B$PREBUILT/bin/i686-linux-android- --target=i686-linux-android -Wl,--rpath-link,$PLATFORM/usr/lib -L$PLATFORM/usr/lib -L$PREBUILT/i686-linux-android/lib -nostdlib -lc -lm -ldl -llog" \
+    --extra-ldflags=" -B$NDK_PREBUILT/bin/i686-linux-android- --target=i686-linux-android -Wl,--rpath-link,$NDK_PLATFORM/usr/lib -L$NDK_PLATFORM/usr/lib -L$NDK_PREBUILT/i686-linux-android/lib -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
     --disable-everything \
     ${MODULES} \

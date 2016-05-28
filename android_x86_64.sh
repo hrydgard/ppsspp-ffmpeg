@@ -1,9 +1,15 @@
 #!/bin/bash
 #Change NDK to your Android NDK location
-NDK=/c/AndroidNDK
-PLATFORM=$NDK/platforms/android-21/arch-arm64
-PREBUILT=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/windows-x86_64
-PREBUILTLLVM=$NDK/toolchains/llvm/prebuilt/windows-x86_64
+if [ "$NDK" = "" ]; then
+    NDK=/c/AndroidNDK
+fi
+if [ "$NDK_PLATFORM" = "" ]; then
+    NDK_PLATFORM=$NDK/platforms/android-21/arch-x86_64
+fi
+if [ "$NDK_PREBUILT" = "" ]; then
+    NDK_PREBUILT=$NDK/toolchains/x86_64-4.9/prebuilt/windows-x86_64
+    NDK_PREBUILTLLVM=$NDK/toolchains/llvm/prebuilt/windows-x86_64
+fi
 
 set -e
 
@@ -11,10 +17,10 @@ GENERAL="\
    --enable-cross-compile \
    --enable-pic \
    --extra-libs="-latomic" \
-   --cc=$PREBUILTLLVM/bin/clang \
-   --cross-prefix=$PREBUILT/bin/aarch64-linux-android- \
-   --ld=$PREBUILTLLVM/bin/clang \
-   --nm=$PREBUILT/bin/aarch64-linux-android-nm"
+   --cc=$NDK_PREBUILTLLVM/bin/clang \
+   --cross-prefix=$NDK_PREBUILT/bin/x86_64-linux-android- \
+   --ld=$NDK_PREBUILTLLVM/bin/clang \
+   --nm=$NDK_PREBUILT/bin/x86_64-linux-android-nm"
 
 MODULES="\
    --disable-avdevice \
@@ -76,18 +82,17 @@ PARSERS="\
     --enable-parser=aac \
     --enable-parser=aac_latm"
 
-function build_arm64
+function build_x86_64
 {
-    # no-missing-prototypes because of a compile error seemingly unique to aarch64.
 ./configure --logfile=conflog.txt --target-os=linux \
-    --prefix=./android/arm64 \
-    --arch=aarch64 \
+    --prefix=./android/x86_64 \
+    --arch=x86_64 \
     ${GENERAL} \
-    --sysroot=$PLATFORM \
-    --extra-cflags=" --target=aarch64-linux-android -O3 -DANDROID -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -Wno-missing-prototypes" \
+    --sysroot=$NDK_PLATFORM \
+    --extra-cflags=" --target=x86_64-linux-android -O3 -DANDROID -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -fomit-frame-pointer -march=x86-64" \
     --disable-shared \
     --enable-static \
-    --extra-ldflags=" -B$PREBUILT/bin/aarch64-linux-android- --target=aarch64-linux-android -Wl,--rpath-link,$PLATFORM/usr/lib -L$PLATFORM/usr/lib -L$PREBUILT/aarch64-linux-android/lib64 -nostdlib -lc -lm -ldl -llog" \
+    --extra-ldflags=" -B$NDK_PREBUILT/bin/x86_64-linux-android- --target=x86_64-linux-android -Wl,--rpath-link,$NDK_PLATFORM/usr/lib64 -L$NDK_PLATFORM/usr/lib64 -L$NDK_PREBUILT/x86_64-linux-android/lib -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
     --disable-everything \
     ${MODULES} \
@@ -103,4 +108,4 @@ make clean
 make -j4 install
 }
 
-build_arm64
+build_x86_64
