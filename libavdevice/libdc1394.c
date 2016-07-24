@@ -41,6 +41,7 @@
 #define DC1394_FRAMERATE_240   FRAMERATE_240
 #endif
 
+#include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 #include "libavutil/log.h"
 #include "libavutil/mathematics.h"
@@ -71,7 +72,7 @@ typedef struct dc1394_data {
     AVPacket packet;
 } dc1394_data;
 
-struct dc1394_frame_format {
+static const struct dc1394_frame_format {
     int width;
     int height;
     enum AVPixelFormat pix_fmt;
@@ -84,7 +85,7 @@ struct dc1394_frame_format {
     { 0, 0, 0, 0 } /* gotta be the last one */
 };
 
-struct dc1394_frame_rate {
+static const struct dc1394_frame_rate {
     int frame_rate;
     int frame_rate_id;
 } dc1394_frame_rates[] = {
@@ -121,12 +122,12 @@ static const AVClass libdc1394_class = {
 
 
 static inline int dc1394_read_common(AVFormatContext *c,
-                                     struct dc1394_frame_format **select_fmt, struct dc1394_frame_rate **select_fps)
+                                     const struct dc1394_frame_format **select_fmt, const struct dc1394_frame_rate **select_fps)
 {
     dc1394_data* dc1394 = c->priv_data;
     AVStream* vst;
-    struct dc1394_frame_format *fmt;
-    struct dc1394_frame_rate *fps;
+    const struct dc1394_frame_format *fmt;
+    const struct dc1394_frame_rate *fps;
     enum AVPixelFormat pix_fmt;
     int width, height;
     AVRational framerate;
@@ -180,7 +181,8 @@ static inline int dc1394_read_common(AVFormatContext *c,
 
     /* packet init */
     av_init_packet(&dc1394->packet);
-    dc1394->packet.size = avpicture_get_size(fmt->pix_fmt, fmt->width, fmt->height);
+    dc1394->packet.size = av_image_get_buffer_size(fmt->pix_fmt,
+                                                   fmt->width, fmt->height, 1);
     dc1394->packet.stream_index = vst->index;
     dc1394->packet.flags |= AV_PKT_FLAG_KEY;
 
@@ -293,8 +295,8 @@ static int dc1394_v2_read_header(AVFormatContext *c)
     dc1394_data* dc1394 = c->priv_data;
     dc1394camera_list_t *list;
     int res, i;
-    struct dc1394_frame_format *fmt = NULL;
-    struct dc1394_frame_rate *fps = NULL;
+    const struct dc1394_frame_format *fmt = NULL;
+    const struct dc1394_frame_rate *fps = NULL;
 
     if (dc1394_read_common(c, &fmt, &fps) != 0)
        return -1;

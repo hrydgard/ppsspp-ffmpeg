@@ -25,6 +25,7 @@
 #define AVFORMAT_MOVENC_H
 
 #include "avformat.h"
+#include "movenccenc.h"
 
 #define MOV_FRAG_INFO_ALLOC_INCREMENT 64
 #define MOV_INDEX_CLUSTER_SIZE 1024
@@ -149,7 +150,14 @@ typedef struct MOVTrack {
     } vc1_info;
 
     void       *eac3_priv;
+
+    MOVMuxCencContext cenc;
 } MOVTrack;
+
+typedef enum {
+    MOV_ENC_NONE = 0,
+    MOV_ENC_CENC_AES_CTR,
+} MOVEncryptionScheme;
 
 typedef struct MOVMuxContext {
     const AVClass *av_class;
@@ -164,7 +172,6 @@ typedef struct MOVMuxContext {
 
     int flags;
     int rtp_flags;
-    int exact;
 
     int iods_skip;
     int iods_video_profile;
@@ -182,7 +189,7 @@ typedef struct MOVMuxContext {
     int video_track_timescale;
 
     int reserved_moov_size; ///< 0 for disabled, -1 for automatic, size otherwise
-    int64_t reserved_moov_pos;
+    int64_t reserved_header_pos;
 
     char *major_brand;
 
@@ -194,6 +201,14 @@ typedef struct MOVMuxContext {
 
     int frag_interleave;
     int missing_duration_warned;
+
+    char *encryption_scheme_str;
+    MOVEncryptionScheme encryption_scheme;
+    uint8_t *encryption_key;
+    int encryption_key_len;
+    uint8_t *encryption_kid;
+    int encryption_kid_len;
+
 } MOVMuxContext;
 
 #define FF_MOV_FLAG_RTP_HINT              (1 <<  0)
@@ -210,8 +225,9 @@ typedef struct MOVMuxContext {
 #define FF_MOV_FLAG_DASH                  (1 << 11)
 #define FF_MOV_FLAG_FRAG_DISCONT          (1 << 12)
 #define FF_MOV_FLAG_DELAY_MOOV            (1 << 13)
-#define FF_MOV_FLAG_WRITE_COLR            (1 << 14)
-#define FF_MOV_FLAG_WRITE_GAMA            (1 << 15)
+#define FF_MOV_FLAG_GLOBAL_SIDX           (1 << 14)
+#define FF_MOV_FLAG_WRITE_COLR            (1 << 15)
+#define FF_MOV_FLAG_WRITE_GAMA            (1 << 16)
 
 int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt);
 

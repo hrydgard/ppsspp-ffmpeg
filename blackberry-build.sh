@@ -7,6 +7,8 @@ if [ -z "$BB_OS" ]; then
 fi
 echo "Building for Blackberry ${BB_OS}"
 
+set -e
+
 GENERAL="\
    --enable-cross-compile \
    --arch=arm \

@@ -173,7 +173,7 @@ static void flush_packet(AVFormatContext *format_context, AVPacket *packet)
                                "Frame rate is too high or specified too precisely. Unable to copy losslessly.\n");
                         apng->framerate_warned = 1;
                     }
-                } else if (apng->last_delay.den > 0) {
+                } else if (apng->last_delay.num > 0) {
                     delay = apng->last_delay;
                 } else {
                     delay = apng->prev_delay;
@@ -192,7 +192,7 @@ static void flush_packet(AVFormatContext *format_context, AVPacket *packet)
     }
     ++apng->frame_number;
 
-    av_free_packet(apng->prev_packet);
+    av_packet_unref(apng->prev_packet);
     if (packet)
         av_copy_packet(apng->prev_packet, packet);
 }

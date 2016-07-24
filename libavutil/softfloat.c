@@ -19,72 +19,17 @@
  */
 
 #include <inttypes.h>
-#include <stdio.h>
 #include "softfloat.h"
 #include "common.h"
 #include "log.h"
 
-#undef printf
+#ifdef TEST
+#include <stdio.h>
 
 static const SoftFloat FLOAT_0_017776489257 = {0x1234, 12};
 static const SoftFloat FLOAT_1374_40625 = {0xabcd, 25};
 static const SoftFloat FLOAT_0_1249694824218 = {0xFFF, 15};
 
-
-static av_const double av_sf2double(SoftFloat v) {
-    v.exp -= ONE_BITS +1;
-    if(v.exp > 0) return (double)v.mant * (double)(1 << v.exp);
-    else          return (double)v.mant / (double)(1 << (-v.exp));
-}
-
-void av_sincos_sf(int a, int *s, int *c)
-{
-    int idx, sign;
-    int sv, cv;
-    int st, ct;
-
-    idx = a >> 26;
-    sign = (idx << 27) >> 31;
-    cv = av_costbl_1_sf[idx & 0xf];
-    cv = (cv ^ sign) - sign;
-
-    idx -= 8;
-    sign = (idx << 27) >> 31;
-    sv = av_costbl_1_sf[idx & 0xf];
-    sv = (sv ^ sign) - sign;
-
-    idx = a >> 21;
-    ct = av_costbl_2_sf[idx & 0x1f];
-    st = av_sintbl_2_sf[idx & 0x1f];
-
-    idx = (int)(((int64_t)cv * ct - (int64_t)sv * st + 0x20000000) >> 30);
-
-    sv = (int)(((int64_t)cv * st + (int64_t)sv * ct + 0x20000000) >> 30);
-
-    cv = idx;
-
-    idx = a >> 16;
-    ct = av_costbl_3_sf[idx & 0x1f];
-    st = av_sintbl_3_sf[idx & 0x1f];
-
-    idx = (int)(((int64_t)cv * ct - (int64_t)sv * st + 0x20000000) >> 30);
-
-    sv = (int)(((int64_t)cv * st + (int64_t)sv * ct + 0x20000000) >> 30);
-    cv = idx;
-
-    idx = a >> 11;
-
-    ct = (int)(((int64_t)av_costbl_4_sf[idx & 0x1f] * (0x800 - (a & 0x7ff)) +
-                (int64_t)av_costbl_4_sf[(idx & 0x1f)+1]*(a & 0x7ff) +
-                0x400) >> 11);
-    st = (int)(((int64_t)av_sintbl_4_sf[idx & 0x1f] * (0x800 - (a & 0x7ff)) +
-                (int64_t)av_sintbl_4_sf[(idx & 0x1f) + 1] * (a & 0x7ff) +
-                0x400) >> 11);
-
-    *c = (int)(((int64_t)cv * ct + (int64_t)sv * st + 0x20000000) >> 30);
-
-    *s = (int)(((int64_t)cv * st + (int64_t)sv * ct + 0x20000000) >> 30);
-}
 
 int main(void){
     SoftFloat one= av_int2sf(1, 0);
@@ -152,6 +97,61 @@ int main(void){
     sf1 = av_int2sf(0xE0000001, 0);
     printf("test4 softfloat: %.10lf (0x%08x %d)\n", (double)av_sf2double(sf1), sf1.mant, sf1.exp);
 
+
+    sf1 = (SoftFloat){ 0x20000000,   MIN_EXP };
+    sf1 = av_mul_sf(sf1, sf1);
+    printf("test5 softfloat: %.10lf (0x%08x %d)\n", (double)av_sf2double(sf1), sf1.mant, sf1.exp);
+
+    sf1 = (SoftFloat){ 0x20000000,   MIN_EXP };
+    sf2 = (SoftFloat){ 0x20000000,   MAX_EXP };
+    i = av_cmp_sf(sf1, sf2);
+    j = av_cmp_sf(sf2, sf1);
+    sf1 = av_div_sf(sf1, sf2);
+    printf("test6 softfloat: %.10lf (0x%08x %d) %d %d\n", (double)av_sf2double(sf1), sf1.mant, sf1.exp, i, j);
+
+    for(i= -50; i<50; i++) {
+        sf1= av_int2sf(i, 0);
+        for(j= -50; j<50; j++) {
+            int c;
+            sf2= av_int2sf(j, 0);
+            c = av_cmp_sf(sf1, sf2);
+            if (FFDIFFSIGN(i,j) != c && (FFDIFFSIGN(i,j)^c)<0) {
+                printf("av_cmp_sf failed at %d %d as %X\n", i, j, c);
+            }
+            c = av_gt_sf(sf1, sf2);
+            if ((i>j) != c) {
+                printf("av_gt_sf failed at %d %d as %X\n", i, j, c);
+            }
+        }
+        sf1 = av_int2sf(1, i);
+        for(j = -50; j < 50; j++) {
+            int c;
+            sf2 = av_int2sf(1, j);
+            c = av_cmp_sf(sf2, sf1);
+            if (FFDIFFSIGN(i,j) != c && (FFDIFFSIGN(i,j)^c) < 0) {
+                printf("av_cmp_sf failed2 at %d %d as %X\n", i, j, c);
+            }
+            c = av_gt_sf(sf1, sf2);
+            if ((i<j) != c) {
+                printf("av_gt_sf failed2 at %d %d as %X\n", i, j, c);
+            }
+        }
+    }
+
+
+    for(i= 0; i<4*36; i++){
+        int s, c;
+        double errs, errc;
+
+        av_sincos_sf(i*(1ULL<<32)/36/4, &s, &c);
+        errs = (double)s/ (1<<30) - sin(i*M_PI/36);
+        errc = (double)c/ (1<<30) - cos(i*M_PI/36);
+        if (fabs(errs) > 0.00000002 || fabs(errc) >0.001) {
+            printf("sincos FAIL %d %f %f %f %f\n", i, (float)s/ (1<<30), (float)c/ (1<<30), sin(i*M_PI/36), cos(i*M_PI/36));
+        }
+
+    }
     return 0;
 
 }
+#endif

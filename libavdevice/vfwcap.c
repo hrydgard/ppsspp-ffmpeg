@@ -234,7 +234,7 @@ static int vfw_read_close(AVFormatContext *s)
     pktl = ctx->pktl;
     while (pktl) {
         AVPacketList *next = pktl->next;
-        av_free_packet(&pktl->pkt);
+        av_packet_unref(&pktl->pkt);
         av_free(pktl);
         pktl = next;
     }
@@ -396,7 +396,7 @@ static int vfw_read_header(AVFormatContext *s)
         codec->codec_id = AV_CODEC_ID_RAWVIDEO;
         if(biCompression == BI_RGB) {
             codec->bits_per_coded_sample = biBitCount;
-            codec->extradata = av_malloc(9 + FF_INPUT_BUFFER_PADDING_SIZE);
+            codec->extradata = av_malloc(9 + AV_INPUT_BUFFER_PADDING_SIZE);
             if (codec->extradata) {
                 codec->extradata_size = 9;
                 memcpy(codec->extradata, "BottomUp", 9);

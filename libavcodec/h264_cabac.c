@@ -1540,8 +1540,12 @@ static int decode_cabac_mb_mvd(H264SliceContext *sl, int ctxbase, int amvd, int 
     int amvd1 = sl->mvd_cache[list][scan8[n] - 1][1] +\
                 sl->mvd_cache[list][scan8[n] - 8][1];\
 \
-    mx += decode_cabac_mb_mvd(sl, 40, amvd0, &mpx);\
-    my += decode_cabac_mb_mvd(sl, 47, amvd1, &mpy);\
+    int mxd = decode_cabac_mb_mvd(sl, 40, amvd0, &mpx);\
+    int myd = decode_cabac_mb_mvd(sl, 47, amvd1, &mpy);\
+    if (mxd == INT_MIN || myd == INT_MIN) \
+        return AVERROR_INVALIDDATA; \
+    mx += mxd;\
+    my += myd;\
 }
 
 static av_always_inline int get_cabac_cbf_ctx(H264SliceContext *sl,
@@ -2026,6 +2030,7 @@ decode_intra_mb:
         const int mb_size = ff_h264_mb_sizes[h->sps.chroma_format_idc] *
                             h->sps.bit_depth_luma >> 3;
         const uint8_t *ptr;
+        int ret;
 
         // We assume these blocks are very rare so we do not optimize it.
         // FIXME The two following lines get the bitstream position in the cabac
@@ -2042,7 +2047,9 @@ decode_intra_mb:
         sl->intra_pcm_ptr = ptr;
         ptr += mb_size;
 
-        ff_init_cabac_decoder(&sl->cabac, ptr, sl->cabac.bytestream_end - ptr);
+        ret = ff_init_cabac_decoder(&sl->cabac, ptr, sl->cabac.bytestream_end - ptr);
+        if (ret < 0)
+            return ret;
 
         // All blocks are present
         h->cbp_table[mb_xy] = 0xf7ef;

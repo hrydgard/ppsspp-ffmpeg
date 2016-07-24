@@ -20,12 +20,15 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_DXVA_INTERNAL_H
-#define AVCODEC_DXVA_INTERNAL_H
+#ifndef AVCODEC_DXVA2_INTERNAL_H
+#define AVCODEC_DXVA2_INTERNAL_H
 
 #define COBJMACROS
 
 #include "config.h"
+
+/* define the proper COM entries before forcing desktop APIs */
+#include <objbase.h>
 
 #if CONFIG_DXVA2
 #include "dxva2.h"
@@ -35,11 +38,16 @@
 #endif
 
 #if HAVE_DXVA_H
+/* When targeting WINAPI_FAMILY_PHONE_APP or WINAPI_FAMILY_APP, dxva.h
+ * defines nothing. Force the struct definitions to be visible. */
+#undef WINAPI_FAMILY
+#define WINAPI_FAMILY WINAPI_FAMILY_DESKTOP_APP
+#undef _CRT_BUILD_DESKTOP_APP
+#define _CRT_BUILD_DESKTOP_APP 0
 #include <dxva.h>
 #endif
 
 #include "avcodec.h"
-#include "mpegvideo.h"
 
 typedef void DECODER_BUFFER_DESC;
 
@@ -110,4 +118,4 @@ int ff_dxva2_common_end_frame(AVCodecContext *, AVFrame *,
                                                   DECODER_BUFFER_DESC *bs,
                                                   DECODER_BUFFER_DESC *slice));
 
-#endif /* AVCODEC_DXVA_INTERNAL_H */
+#endif /* AVCODEC_DXVA2_INTERNAL_H */

@@ -29,6 +29,7 @@
 #define AVCODEC_H264_H
 
 #include "libavutil/intreadwrite.h"
+#include "libavutil/thread.h"
 #include "cabac.h"
 #include "error_resilience.h"
 #include "get_bits.h"
@@ -132,11 +133,12 @@ enum {
 typedef enum {
     SEI_TYPE_BUFFERING_PERIOD       = 0,   ///< buffering period (H.264, D.1.1)
     SEI_TYPE_PIC_TIMING             = 1,   ///< picture timing
-    SEI_TYPE_USER_DATA_ITU_T_T35    = 4,   ///< user data registered by ITU-T Recommendation T.35
+    SEI_TYPE_USER_DATA_REGISTERED   = 4,   ///< registered user data as specified by Rec. ITU-T T.35
     SEI_TYPE_USER_DATA_UNREGISTERED = 5,   ///< unregistered user data
     SEI_TYPE_RECOVERY_POINT         = 6,   ///< recovery point (frame # to decoder sync)
     SEI_TYPE_FRAME_PACKING          = 45,  ///< frame packing arrangement
     SEI_TYPE_DISPLAY_ORIENTATION    = 47,  ///< display orientation
+    SEI_TYPE_GREEN_METADATA         = 56   ///< GreenMPEG information
 } SEI_Type;
 
 /**
@@ -228,6 +230,8 @@ typedef struct SPS {
     int residual_color_transform_flag;    ///< residual_colour_transform_flag
     int constraint_set_flags;             ///< constraint_set[0-3]_flag
     int new;                              ///< flag to keep track if the decoder context needs re-init due to changed SPS
+    uint8_t data[4096];
+    size_t data_size;
 } SPS;
 
 /**
@@ -253,6 +257,8 @@ typedef struct PPS {
     uint8_t scaling_matrix8[6][64];
     uint8_t chroma_qp_table[2][QP_MAX_NUM+1];  ///< pre-scaled (with chroma_qp_index_offset) version of qp_table
     int chroma_qp_diff;
+    uint8_t data[4096];
+    size_t data_size;
 } PPS;
 
 /**
@@ -266,6 +272,22 @@ typedef struct FPA {
     int         content_interpretation_type;
     int         quincunx_sampling_flag;
 } FPA;
+
+/**
+ *     Green MetaData Information Type
+ */
+typedef struct GreenMetaData {
+    uint8_t  green_metadata_type;
+    uint8_t  period_type;
+    uint16_t  num_seconds;
+    uint16_t  num_pictures;
+    uint8_t percent_non_zero_macroblocks;
+    uint8_t percent_intra_coded_macroblocks;
+    uint8_t percent_six_tap_filtering;
+    uint8_t percent_alpha_point_deblocking_instance;
+    uint8_t xsd_metric_type;
+    uint16_t xsd_metric_value;
+} GreenMetaData;
 
 /**
  * Memory management control operation opcode.
@@ -409,7 +431,8 @@ typedef struct H264SliceContext {
     int mb_xy;
     int resync_mb_x;
     int resync_mb_y;
-    int mb_index_end;
+    // index of the first MB of the next slice
+    int next_slice_idx;
     int mb_skip_run;
     int is_complex;
 
@@ -518,6 +541,14 @@ typedef struct H264Context {
     /* coded dimensions -- 16 * mb w/h */
     int width, height;
     int chroma_x_shift, chroma_y_shift;
+
+    /**
+     * Backup frame properties: needed, because they can be different
+     * between returned frame and last decoded frame.
+     **/
+    int backup_width;
+    int backup_height;
+    enum AVPixelFormat backup_pix_fmt;
 
     int droppable;
     int coded_picture_number;
@@ -638,7 +669,7 @@ typedef struct H264Context {
      */
     int max_pic_num;
 
-    H264Ref default_ref_list[2][32]; ///< base reference list for all slices of a coded picture
+    H264Ref default_ref[2];
     H264Picture *short_ref[32];
     H264Picture *long_ref[32];
     H264Picture *delayed_pic[MAX_DELAYED_PIC_COUNT + 2]; // FIXME size?
@@ -683,8 +714,6 @@ typedef struct H264Context {
 
     enum AVPictureType pict_type;
 
-    int last_slice_type;
-    unsigned int last_ref_count[2];
     /** @} */
 
     /**
@@ -714,6 +743,14 @@ typedef struct H264Context {
     int sei_display_orientation_present;
     int sei_anticlockwise_rotation;
     int sei_hflip, sei_vflip;
+
+    /**
+     * User data registered by Rec. ITU-T T.35 SEI
+     */
+    int sei_reguserdata_afd_present;
+    uint8_t active_format_description;
+    int a53_caption_size;
+    uint8_t *a53_caption;
 
     /**
      * Bit set of clock types for fields/frames in picture timing SEI message.
@@ -773,6 +810,11 @@ typedef struct H264Context {
 
     int missing_fields;
 
+/* for frame threading, this is set to 1
+     * after finish_setup() has been called, so we cannot modify
+     * some context properties (which are supposed to stay constant between
+     * slices) anymore */
+    int setup_finished;
 
     // Timestamp stuff
     int sei_buffering_period_present;   ///< Buffering period SEI flag
@@ -796,6 +838,10 @@ typedef struct H264Context {
     /* Motion Estimation */
     qpel_mc_func (*qpel_put)[16];
     qpel_mc_func (*qpel_avg)[16];
+
+    /*Green Metadata */
+    GreenMetaData sei_green_metadata;
+
 } H264Context;
 
 extern const uint8_t ff_h264_chroma_qp[7][QP_MAX_NUM + 1]; ///< One chroma qp table for each possible bit depth (8-14).
@@ -848,11 +894,6 @@ int ff_h264_get_slice_type(const H264SliceContext *sl);
  * needs width/height
  */
 int ff_h264_alloc_tables(H264Context *h);
-
-/**
- * Fill the default_ref_list.
- */
-int ff_h264_fill_default_ref_list(H264Context *h, H264SliceContext *sl);
 
 int ff_h264_decode_ref_pic_list_reordering(H264Context *h, H264SliceContext *sl);
 void ff_h264_fill_mbaff_ref_list(H264Context *h, H264SliceContext *sl);
@@ -1148,15 +1189,17 @@ static inline int get_avc_nalsize(H264Context *h, const uint8_t *buf,
 {
     int i, nalsize = 0;
 
-    if (*buf_index >= buf_size - h->nal_length_size)
-        return -1;
+    if (*buf_index >= buf_size - h->nal_length_size) {
+        // the end of the buffer is reached, refill it.
+        return AVERROR(EAGAIN);
+    }
 
     for (i = 0; i < h->nal_length_size; i++)
         nalsize = ((unsigned)nalsize << 8) | buf[(*buf_index)++];
     if (nalsize <= 0 || nalsize > buf_size - *buf_index) {
         av_log(h->avctx, AV_LOG_ERROR,
                "AVC: nal size %d\n", nalsize);
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
     return nalsize;
 }
