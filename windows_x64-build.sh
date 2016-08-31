@@ -76,11 +76,9 @@ AUDIO_ENCODERS="
     --enable-encoder=pcm_s16le
 "
 
-#unused
 VIDEO_ENCODERS="
-    --enable-encoder=huffyuv
     --enable-encoder=ffv1
-    --enable-encoder=mjpeg
+    --enable-encoder=mpeg4
 "
 
 HARDWARE_ACCELS="
@@ -92,7 +90,6 @@ HARDWARE_ACCELS="
 #    --enable-hwaccel=mpeg4_vdpau
 "
 
-#unused
 MUXERS="
     --enable-muxer=avi
 "
@@ -123,7 +120,9 @@ PARSERS="
     --enable-parser=aac_latm
 "
 
-PROTOCOLS=""
+PROTOCOLS="
+    --enable-protocol=file
+"
 
 BSFS="
 #    --enable-bsf=aac_adtstoasc
@@ -221,6 +220,7 @@ $(echo -e "$(genelateparams MUXERS)")\
 $(echo -e "$(genelateparams DEMUXERS)")\
 $(echo -e "$(genelateparams HARDWARE_ACCELS)")\
 $(echo -e "$(genelateparams INPUT_DEVICES)")\
+$(echo -e "$(genelateparams PROTOCOLS)")
 "
 params_dump PARAMS
 

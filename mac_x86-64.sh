@@ -51,9 +51,8 @@ DEMUXERS="\
     --enable-demuxer=wav"
 
 VIDEO_ENCODERS="\
-	  --enable-encoder=huffyuv
 	  --enable-encoder=ffv1
-	  --enable-encoder=mjpeg"
+	  --enable-encoder=mpeg4"
 
 AUDIO_ENCODERS="\
 	  --enable-encoder=pcm_s16le"
@@ -68,6 +67,8 @@ PARSERS="\
     --enable-parser=aac \
     --enable-parser=mpegaudio"
 
+PROTOCOLS="\
+  	--enable-protocol=file"
 
 ./configure \
     --prefix=./macosx/${ARCH} \
@@ -83,6 +84,7 @@ PARSERS="\
     ${DEMUXERS} \
     ${MUXERS} \
     ${PARSERS} \
+	${PROTOCOLS} \
 		--arch=${ARCH} \
 		--cc=clang
 
