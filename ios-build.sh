@@ -1,151 +1,66 @@
 #!/bin/bash
-#build ffmpeg for armv7,armv7s and uses lipo to create fat libraries and deletes the originals
-PLATFORM=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/
+#build ffmpeg for all archs and uses lipo to create fat libraries and deletes the originals
 
 set -e
 
-GENERAL="\
-   --enable-cross-compile \
-   --arch=arm \
-   --cc=$PLATFORM/usr/bin/gcc"
+. shared_options.sh
+PATH=$(PWD)/gas-preprocessor:$PATH
 
-MODULES="\
-   --disable-filters \
-   --disable-programs \
-   --disable-network \
-   --disable-avfilter \
-   --disable-postproc \
-   --disable-encoders \
-   --disable-protocols \
-   --disable-hwaccels \
-   --disable-doc"
+ARCHS="armv7 arm64 i386 x86_64"
 
-VIDEO_DECODERS="\
-   --enable-decoder=h264 \
-   --enable-decoder=mpeg4 \
-   --enable-decoder=mpeg2video \
-   --enable-decoder=mjpeg \
-   --enable-decoder=mjpegb"
+for arch in ${ARCHS}; do
+  rm -f config.h
 
-AUDIO_DECODERS="\
-    --enable-decoder=aac \
-    --enable-decoder=aac_latm \
-    --enable-decoder=atrac3 \
-    --enable-decoder=atrac3p \
-    --enable-decoder=mp3 \
-    --enable-decoder=pcm_s16le \
-    --enable-decoder=pcm_s8"
+  ffarch=${arch}
+  versionmin=6.0
+  cpu=generic
 
-DEMUXERS="\
-    --enable-demuxer=h264 \
-    --enable-demuxer=m4v \
-    --enable-demuxer=mpegvideo \
-    --enable-demuxer=mpegps \
-    --enable-demuxer=mp3 \
-    --enable-demuxer=avi \
-    --enable-demuxer=aac \
-    --enable-demuxer=pmp \
-    --enable-demuxer=oma \
-    --enable-demuxer=pcm_s16le \
-    --enable-demuxer=pcm_s8 \
-    --enable-demuxer=wav"
+  if [[ ${arch} == "armv7" ]]; then
+    sdk=iphoneos
+    cpu=cortex-a8
+    cflags="-mfpu=neon"
+    extraopts="--enable-vfp --enable-neon"
+  elif [[ ${arch} == "arm64" ]]; then
+    sdk=iphoneos
+    ffarch=aarch64
+    versionmin=7.0
+  elif [[ ${arch} == "i386" ]]; then
+    sdk=iphonesimulator
+    ffarch=x86
+  elif [[ ${arch} == "x86_64" ]]; then
+    sdk=iphonesimulator
+  fi
 
-PARSERS="\
-    --enable-parser=h264 \
-    --enable-parser=mpeg4video \
-    --enable-parser=mpegaudio \
-    --enable-parser=mpegvideo \
-    --enable-parser=aac \
-    --enable-parser=aac_latm"
-
-VIDEO_ENCODERS="\
-	  --enable-encoder=mjpeg"
-
-AUDIO_ENCODERS="\
-	  --enable-encoder=pcm_s16le"
-
-MUXERS="\
-  	--enable-muxer=avi"
-
-
-./configure \
-    --prefix=ios/armv7 \
-    $GENERAL \
-    --sysroot="$PLATFORM/SDKs/iPhoneOS6.1.sdk" \
-    --extra-cflags="-arch armv7 -mfpu=neon -miphoneos-version-min=6.0" \
-    --disable-shared \
-    --enable-static \
-    --extra-ldflags="-arch armv7 -isysroot $PLATFORM/SDKs/iPhoneOS6.1.sdk -miphoneos-version-min=6.0" \
-    --enable-zlib \
-    --disable-everything \
-    ${MODULES} \
-    ${VIDEO_DECODERS} \
-    ${AUDIO_DECODERS} \
-    ${VIDEO_ENCODERS} \
-    ${AUDIO_ENCODERS} \
-    ${DEMUXERS} \
-		${MUXERS} \
-    ${PARSERS} \
+  ./configure \
+    --prefix=ios/${arch} \
+    --enable-cross-compile \
+    --arch=${ffarch} \
+    --cc=$(xcrun -f clang) \
+    --sysroot="$(xcrun --sdk ${sdk} --show-sdk-path)" \
+    --extra-cflags="-arch ${arch} -D_DARWIN_FEATURE_CLOCK_GETTIME=0 -miphoneos-version-min=${versionmin} ${cflags}" \
+    ${CONFIGURE_OPTS} \
+    --extra-ldflags="-arch ${arch} -isysroot $(xcrun --sdk ${sdk} --show-sdk-path) -miphoneos-version-min=${versionmin}" \
     --target-os=darwin \
-    --enable-vfp \
-    --enable-neon \
-    --cpu=cortex-a8 \
+    ${extraopts} \
+    --cpu=${cpu} \
     --enable-pic
 
-make clean
-make && make install
-
-if [ "$?" != "0" ]; then
-    exit 1;
-fi
-
-./configure \
-    --prefix=ios/armv7s \
-    $GENERAL \
-    --sysroot="$PLATFORM/SDKs/iPhoneOS6.1.sdk" \
-    --extra-cflags="-arch armv7s -mfpu=neon -miphoneos-version-min=6.0" \
-    --disable-shared \
-    --enable-static \
-    --extra-ldflags="-arch armv7s -isysroot $PLATFORM/SDKs/iPhoneOS6.1.sdk -miphoneos-version-min=6.0" \
-    --enable-zlib \
-    --disable-everything \
-    ${MODULES} \
-    ${VIDEO_DECODERS} \
-    ${AUDIO_DECODERS} \
-    ${VIDEO_ENCODERS} \
-    ${AUDIO_ENCODERS} \
-    ${DEMUXERS} \
-    ${MUXERS} \
-    ${PARSERS} \
-    --target-os=darwin \
-    --enable-vfp \
-    --enable-neon \
-    --cpu=cortex-a9 \
-    --enable-pic
-
-make clean
-make && make install
-
-if [ "$?" != "0" ]; then
-    exit 1;
-fi
+  make clean
+  make -j8 install
+done
 
 cd ios
 mkdir -p universal/lib
 
-
-xcrun -sdk iphoneos lipo -create -arch armv7 armv7/lib/libavformat.a -arch armv7s armv7s/lib/libavformat.a -output universal/lib/libavformat.a
-
-xcrun -sdk iphoneos lipo -create -arch armv7 armv7/lib/libavutil.a -arch armv7s armv7s/lib/libavutil.a -output universal/lib/libavutil.a
-
-xcrun -sdk iphoneos lipo -create -arch armv7 armv7/lib/libswresample.a -arch armv7s armv7s/lib/libswresample.a -output universal/lib/libswresample.a
-
-xcrun -sdk iphoneos lipo -create -arch armv7 armv7/lib/libavcodec.a -arch armv7s armv7s/lib/libavcodec.a -output universal/lib/libavcodec.a
-
-xcrun -sdk iphoneos lipo -create -arch armv7 armv7/lib/libswscale.a -arch armv7s armv7s/lib/libswscale.a -output universal/lib/libswscale.a
-
-xcrun -sdk iphoneos lipo -create -arch armv7 armv7/lib/libavdevice.a -arch armv7s armv7s/lib/libavdevice.a -output universal/lib/libavdevice.a
+for i in armv7/lib/*.a; do
+  libname=$(basename $i)
+  xcrun lipo -create $(
+    for a in ${ARCHS}; do
+      echo -arch ${a} ${a}/lib/${libname}
+    done
+  ) -output universal/lib/${libname}
+done
 
 cp -r armv7/include universal/
 
-rm -rf armv7 armv7s
+rm -rf ${ARCHS}
