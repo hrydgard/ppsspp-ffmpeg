@@ -27,6 +27,7 @@ MODULES="\
 
 VIDEO_DECODERS="\
    --enable-decoder=h264 \
+   --enable-decoder=mpeg4 \
    --enable-decoder=h263 \
    --enable-decoder=h263p \
    --enable-decoder=mpeg2video"
