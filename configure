@@ -4678,6 +4678,9 @@ case $target_os in
         ;;
     minix)
         ;;
+    horizon)
+        network_extralibs="-lnx"
+        ;;
     plan9)
         add_cppflags -D_C99_SNPRINTF_EXTENSION  \
                      -D_REENTRANT_SOURCE        \
@@ -5688,7 +5691,7 @@ check_header sndio.h
 if check_struct sys/soundcard.h audio_buf_info bytes; then
     enable_safe sys/soundcard.h
 else
-    check_cc -D__BSD_VISIBLE -D__XSI_VISIBLE <<EOF && add_cppflags -D__BSD_VISIBLE -D__XSI_VISIBLE && enable_safe sys/soundcard.h
+    check_cc -D__BSD_VISIBLE=1 -D__XSI_VISIBLE <<EOF && add_cppflags -D__BSD_VISIBLE -D__XSI_VISIBLE && enable_safe sys/soundcard.h
     #include <sys/soundcard.h>
     audio_buf_info abc;
 EOF

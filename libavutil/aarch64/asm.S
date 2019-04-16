@@ -32,6 +32,11 @@
 #   define FUNC #
 #endif
 
+#if __SWITCH__
+#undef HAVE_SECTION_DATA_REL_RO
+#define HAVE_SECTION_DATA_REL_RO 1
+#endif 
+
 .macro  function name, export=0, align=2
     .macro endfunc
 ELF     .size   \name, . - \name

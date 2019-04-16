@@ -37,7 +37,9 @@
 #if HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#ifndef __SWITCH__
 #include <fenv.h>
+#endif // __SWITCH__
 
 #if CONFIG_LIBFONTCONFIG
 #include <fontconfig/fontconfig.h>
@@ -940,12 +942,16 @@ static int func_eval_expr_int_format(AVFilterContext *ctx, AVBPrint *bp,
         }
     }
 
+#ifndef __SWITCH__
     feclearexcept(FE_ALL_EXCEPT);
+#endif
     intval = res;
+#ifndef __SWITCH__
     if ((ret = fetestexcept(FE_INVALID|FE_OVERFLOW|FE_UNDERFLOW))) {
         av_log(ctx, AV_LOG_ERROR, "Conversion of floating-point result to int failed. Control register: 0x%08x. Conversion result: %d\n", ret, intval);
         return AVERROR(EINVAL);
     }
+#endif
 
     if (argc == 3)
         av_strlcatf(fmt_str, sizeof(fmt_str), "0%u", positions);
