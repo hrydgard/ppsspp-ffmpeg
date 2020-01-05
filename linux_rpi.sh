@@ -85,7 +85,7 @@ function build_ARMv7
 ./configure --target-os=linux \
     --prefix=./linux/armv7 \
     ${GENERAL} \
-    --extra-cflags=" -O3 -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfpu=neon -marm -march=armv7-a" \
+    --extra-cflags=" -O3 -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mfpu=neon -marm -march=armv7-a -fPIC" \
     --disable-shared \
     --enable-static \
     --enable-zlib \
