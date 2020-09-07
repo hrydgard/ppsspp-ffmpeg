@@ -78,7 +78,7 @@ function build_WUP
 ./configure --target-os=linux \
     --prefix=./wiiu \
     ${GENERAL} \
-    --extra-cflags="-O3 -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mwup -mcpu=750 -meabi -mhard-float -U__INT32_TYPE__ -U__UINT32_TYPE__ -D__INT32_TYPE__=int" \
+    --extra-cflags="-O3 -fasm -Wno-psabi -fno-short-enums -fno-strict-aliasing -finline-limit=300 -mcpu=750 -meabi -mhard-float -D__wiiu__ -DHW_WUP -D__powerpc__ -DWORDS_BIGENDIAN -DFD_SETSIZE=32 -ffunction-sections -fdata-sections" \
     --disable-shared \
     --enable-static \
     --enable-zlib \
@@ -93,7 +93,7 @@ function build_WUP
     ${PARSERS}
 
 make clean
-make install
+make -j6 install
 }
 
 build_WUP
