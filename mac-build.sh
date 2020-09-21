@@ -34,7 +34,7 @@ for arch in ${ARCHS}; do
     --sysroot="$(xcrun --sdk ${sdk} --show-sdk-path)" \
     --extra-cflags="-arch ${arch} -D__STDC_CONSTANT_MACROS -D_DARWIN_FEATURE_CLOCK_GETTIME=0 -mmacosx-version-min=${versionmin} ${cflags}" \
     ${CONFIGURE_OPTS} \
-    --extra-ldflags="-arch ${arch} -isysroot $(xcrun --sdk ${sdk} --show-sdk-path) -mmacosx-version-min==${versionmin}" \
+    --extra-ldflags="-arch ${arch} -isysroot $(xcrun --sdk ${sdk} --show-sdk-path) -mmacosx-version-min=${versionmin}" \
     --target-os=darwin \
     ${extraopts} \
     --cpu=${cpu} \
