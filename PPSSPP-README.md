@@ -6,7 +6,8 @@ A private copy of FFMPEG used in PPSSPP.
 Building
 ========
 
-If on Mac, iOS, Blackberry, Symbian or Linux, just run the corresponding build script
+If on Mac, iOS, Blackberry, Symbian or Linux, just run the corresponding build script.
+
 If you are on an ARM Linux device, modify the ARCH used in the Linux script first.
 
 
@@ -60,4 +61,4 @@ this by running the following commands (WARNING: this will delete all your chang
     git reset --hard
 
 This won't affect anything other than this repo, though.  See also
-[ffmpeg ticket #1209] (https://ffmpeg.org/trac/ffmpeg/ticket/1209).
+[ffmpeg ticket #1209](https://ffmpeg.org/trac/ffmpeg/ticket/1209).
