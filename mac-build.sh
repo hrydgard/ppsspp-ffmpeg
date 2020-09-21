@@ -23,7 +23,7 @@ for arch in ${ARCHS}; do
     versionmin=11.0
   elif [[ ${arch} == "x86_64" ]]; then
     sdk=macosx
-    ffarch=x86-64 #because there's no guarantee that the CPU will be Intel in the future. 
+    ffarch=x86_64 #because there's no guarantee that the CPU will be Intel in the future. 
   fi
 
   ./configure \
