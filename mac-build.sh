@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #build ffmpeg for all archs and uses lipo to create fat libraries and deletes the originals
 
 set -e
