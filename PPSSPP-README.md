@@ -46,7 +46,7 @@ Building for Mac
 ================
 
     brew install yasm
-    rm -rf macosx/x86_64
+    rm -rf macosx/x86_64 macosx/universal
     ./mac_x86-64.sh
 
 
