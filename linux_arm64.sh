@@ -90,6 +90,7 @@ function build_ARM64
     --disable-shared \
     --enable-static \
     --enable-zlib \
+    --enable-pic \
     --disable-everything \
     ${MODULES} \
     ${VIDEO_DECODERS} \
