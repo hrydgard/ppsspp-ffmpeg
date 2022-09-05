@@ -33,10 +33,16 @@ Building for Android on Windows
 Building for Windows
 ====================
 
+old:
     mv /mingw/msys/1.0/bin/link.exe /mingw/msys/1.0/bin/mingw_link.exe
 
-  * Start "VS2013 x86 Native Tools Command Prompt"
+new:
+    mv /usr/bin/link.exe /usr/bin/ming_link.exe   # to avoid clash with VS link.exe. not sure if still needed
+    pacman --sync dos2unix nasm make
+
+  * Start "x86 Native Tools Command Prompt for VS 2022"
   * Start msys from within the prompt you get
+    > msys2_shell.cmd -full-path
   * ./windows_x86_build.sh
 
   * Same three steps for x64 (x64 Native Tools etc)
