@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# NOTE: If you want to do a debug build, use the --disable-optimization flag below, not -O0 or similar in cflags.
+
 BUILD_ANDROID_PLATFORM="android-21"
 
 # Change NDK to your Android NDK location if needed
@@ -24,6 +26,10 @@ GENERAL="\
    --cross-prefix=$NDK_PREBUILT/bin/aarch64-linux-android- \
    --ld=$NDK_PREBUILTLLVM/bin/clang \
    --nm=$NDK_PREBUILT/bin/aarch64-linux-android-nm"
+#   --disable-optimizations"
+
+EXTRA_CC="\
+    -DCONFIG_SAFE_BITSTREAM_READER=1"
 
 MODULES="\
    --disable-avdevice \
@@ -87,13 +93,12 @@ PARSERS="\
 
 function build_arm64
 {
-    # no-missing-prototypes because of a compile error seemingly unique to aarch64.
 ./configure --logfile=conflog.txt --target-os=linux \
     --prefix=./android/arm64 \
     --arch=aarch64 \
     ${GENERAL} \
     --sysroot=$NDK/sysroot \
-    --extra-cflags=" --target=aarch64-none-linux-android21 -no-canonical-prefixes -fdata-sections -ffunction-sections -fno-limit-debug-info -funwind-tables -fPIC -O2 -DANDROID -DANDROID_PLATFORM=$BUILD_ANDROID_PLATFORM -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -Wno-missing-prototypes" \
+    --extra-cflags="$EXTRA_CC --target=aarch64-none-linux-android21 -no-canonical-prefixes -fdata-sections -ffunction-sections -fno-limit-debug-info -funwind-tables -g -O2 -DANDROID -DANDROID_PLATFORM=$BUILD_ANDROID_PLATFORM -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing" \
     --disable-shared \
     --enable-static \
     --extra-ldflags=" -B$NDK_PREBUILT/bin/aarch64-linux-android- --target=aarch64-linux-android -Wl,--rpath-link,$NDK_PLATFORM/usr/lib -L$NDK_PLATFORM/usr/lib -L$NDK_PREBUILT/aarch64-linux-android/lib64 -nostdlib -lc -lm -ldl -llog" \
