@@ -852,7 +852,7 @@ static void decode_qu_spectra(GetBitContext *gb, const Atrac3pSpecCodeTab *tab,
  * @param[in]     num_channels  number of channels to process
  * @param[in]     avctx         ptr to the AVCodecContext
  */
-static void decode_spectrum(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
+static int decode_spectrum(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
                             int num_channels, AVCodecContext *avctx)
 {
     int i, ch_num, qu, wordlen, codetab, tab_index, num_specs;
@@ -901,12 +901,20 @@ static void decode_spectrum(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
          * if there are more than 2 quant units. The lowest two units
          * correspond to the frequencies 0...351 Hz, whose shouldn't
          * be affected by the power compensation. */
-        if (ctx->used_quant_units > 2) {
+        if (ctx->used_quant_units > 2 && ctx->num_coded_subbands > 0) {
             num_specs = atrac3p_subband_to_num_powgrps[ctx->num_coded_subbands - 1];
-            for (i = 0; i < num_specs; i++)
-                chan->power_levs[i] = get_bits(gb, 4);
+            if (get_bits_left(gb) < 4 * num_specs || num_specs < 0) {
+                return AVERROR_INVALIDDATA;
+            }
+            for (i = 0; i < num_specs; i++) {
+                int bits = get_bits(gb, 4);
+                if (i < 5) {
+                    chan->power_levs[i] = bits;
+                }
+            }
         }
     }
+    return 0;
 }
 
 /**
@@ -925,6 +933,10 @@ static void decode_spectrum(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 static int get_subband_flags(GetBitContext *gb, uint8_t *out, int num_flags)
 {
     int i, result;
+
+    if (get_bits_left(gb) < 2) {
+        return AVERROR_INVALIDDATA;
+    }
 
     memset(out, 0, num_flags);
 
@@ -1763,6 +1775,10 @@ int ff_atrac3p_decode_channel_unit(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
 {
     int ret;
 
+    // PATCH
+    if (get_bits_left(gb) < 6)
+        return AVERROR_INVALIDDATA;
+
     /* parse sound header */
     ctx->num_quant_units = get_bits(gb, 5) + 1;
     if (ctx->num_quant_units > 28 && ctx->num_quant_units < 32) {
@@ -1789,7 +1805,8 @@ int ff_atrac3p_decode_channel_unit(GetBitContext *gb, Atrac3pChanUnitCtx *ctx,
     if ((ret = decode_code_table_indexes(gb, ctx, num_channels, avctx)) < 0)
         return ret;
 
-    decode_spectrum(gb, ctx, num_channels, avctx);
+    if ((ret = decode_spectrum(gb, ctx, num_channels, avctx)) < 0)
+        return ret;
 
     if (num_channels == 2) {
         get_subband_flags(gb, ctx->swap_channels, ctx->num_coded_subbands);
