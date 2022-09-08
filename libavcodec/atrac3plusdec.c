@@ -339,11 +339,23 @@ static int atrac3p_decode_frame(AVCodecContext *avctx, void *data,
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
 
-    if ((ret = init_get_bits8(&ctx->gb, avpkt->data, avpkt->size)) < 0)
+    // PPSSPP workaround: With bad/corrupt input, the atrac3plus decoder does not
+    // reliably stay inside the bounds of the buffer. Instead of carefully checking everything
+    // inside it, for now let's just give it more space to read from.
+    const int extra_bytes = 1024;
+
+    uint8_t *bigger_buffer = malloc(avpkt->size + extra_bytes);
+    memset(bigger_buffer + avpkt->size, 0, extra_bytes);
+    memcpy(bigger_buffer, avpkt->data, avpkt->size);
+
+    if ((ret = init_get_bits8(&ctx->gb, bigger_buffer, avpkt->size)) < 0) {
+        free(bigger_buffer);
         return ret;
+    }
 
     if (get_bits1(&ctx->gb)) {
         av_log(avctx, AV_LOG_ERROR, "Invalid start bit!\n");
+        free(bigger_buffer);
         return AVERROR_INVALIDDATA;
     }
 
@@ -351,12 +363,14 @@ static int atrac3p_decode_frame(AVCodecContext *avctx, void *data,
            (ch_unit_id = get_bits(&ctx->gb, 2)) != CH_UNIT_TERMINATOR) {
         if (ch_unit_id == CH_UNIT_EXTENSION) {
             avpriv_report_missing_feature(avctx, "Channel unit extension");
+            free(bigger_buffer);
             return AVERROR_PATCHWELCOME;
         }
         if (ch_block >= ctx->num_channel_blocks ||
             ctx->channel_blocks[ch_block] != ch_unit_id) {
             av_log(avctx, AV_LOG_ERROR,
                    "Frame data doesn't match channel configuration!\n");
+            free(bigger_buffer);
             return AVERROR_INVALIDDATA;
         }
 
@@ -366,8 +380,10 @@ static int atrac3p_decode_frame(AVCodecContext *avctx, void *data,
         if ((ret = ff_atrac3p_decode_channel_unit(&ctx->gb,
                                                   &ctx->ch_units[ch_block],
                                                   channels_to_process,
-                                                  avctx)) < 0)
+                                                  avctx)) < 0) {
+            free(bigger_buffer);
             return ret;
+        }
 
         decode_residual_spectrum(&ctx->ch_units[ch_block], ctx->samples,
                                  channels_to_process, avctx);
@@ -384,6 +400,7 @@ static int atrac3p_decode_frame(AVCodecContext *avctx, void *data,
 
     *got_frame_ptr = 1;
 
+    free(bigger_buffer);
     return FFMIN(avctx->block_align, avpkt->size);
 }
 
