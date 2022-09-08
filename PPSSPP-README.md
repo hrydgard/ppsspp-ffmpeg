@@ -21,13 +21,24 @@ Instead of ./configure, just run ./windows_x86-build.sh.
 Building for Android on Windows
 ===============================
 
+old:
   * Install a proper msys environment (don't use the one from msys-git)
-  
+
   * Install: mingw32-base, mingw32-gcc, msys-base, msys-core, msys-coreutils, mingw-developer-tools
 
 	* Install yasm as yasm.exe in mingw/msys/1.0/bin. http://yasm.tortall.net/Download.html
 
 	* CD to the directory and run ./android-build.sh  (first adjust the paths within).
+
+new:
+  * install msys
+
+  * pacman --sync yasm diffutils
+
+  * edit NDK paths in android-arm64-v8a.sh (or whichever one you want to build)
+
+  * ./android-build.sh
+
 
 
 Building for Windows

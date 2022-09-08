@@ -1,10 +1,13 @@
 #!/bin/bash
-#Change NDK to your Android NDK location
+
+BUILD_ANDROID_PLATFORM="android-21"
+
+# Change NDK to your Android NDK location if needed
 if [ "$NDK" = "" ]; then
-    NDK=/c/AndroidNDK
+    NDK=/c/Android/sdk/ndk/21.4.7075529
 fi
 if [ "$NDK_PLATFORM" = "" ]; then
-    NDK_PLATFORM=$NDK/platforms/android-21/arch-arm64
+    NDK_PLATFORM=$NDK/platforms/$BUILD_ANDROID_PLATFORM/arch-arm64
 fi
 if [ "$NDK_PREBUILT" = "" ]; then
     NDK_PREBUILT=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/windows-x86_64
@@ -49,7 +52,7 @@ AUDIO_DECODERS="\
     --enable-decoder=mp3 \
     --enable-decoder=pcm_s16le \
     --enable-decoder=pcm_s8"
-  
+
 DEMUXERS="\
     --enable-demuxer=h264 \
     --enable-demuxer=m4v \
@@ -89,8 +92,8 @@ function build_arm64
     --prefix=./android/arm64 \
     --arch=aarch64 \
     ${GENERAL} \
-    --sysroot=$NDK_PLATFORM \
-    --extra-cflags=" --target=aarch64-linux-android -O3 -DANDROID -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -Wno-missing-prototypes" \
+    --sysroot=$NDK/sysroot \
+    --extra-cflags=" --target=aarch64-none-linux-android21 -no-canonical-prefixes -fdata-sections -ffunction-sections -fno-limit-debug-info -funwind-tables -fPIC -O2 -DANDROID -DANDROID_PLATFORM=$BUILD_ANDROID_PLATFORM -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -Wno-missing-prototypes" \
     --disable-shared \
     --enable-static \
     --extra-ldflags=" -B$NDK_PREBUILT/bin/aarch64-linux-android- --target=aarch64-linux-android -Wl,--rpath-link,$NDK_PLATFORM/usr/lib -L$NDK_PLATFORM/usr/lib -L$NDK_PREBUILT/aarch64-linux-android/lib64 -nostdlib -lc -lm -ldl -llog" \
