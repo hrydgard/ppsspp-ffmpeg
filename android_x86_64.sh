@@ -88,7 +88,6 @@ function build_x86_64
     --prefix=./android/x86_64 \
     --arch=x86_64 \
     ${GENERAL} \
-    --sysroot=$NDK_PLATFORM \
     --extra-cflags=" --target=x86_64-linux-android -O3 -DANDROID -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -fomit-frame-pointer -march=x86-64" \
     --disable-shared \
     --enable-static \
