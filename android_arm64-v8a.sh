@@ -92,7 +92,6 @@ function build_arm64
     --prefix=./android/arm64 \
     --arch=aarch64 \
     ${GENERAL} \
-    --sysroot=$NDK/sysroot \
     --extra-cflags=" --target=aarch64-none-linux-android21 -no-canonical-prefixes -fdata-sections -ffunction-sections -fno-limit-debug-info -funwind-tables -fPIC -O2 -DANDROID -DANDROID_PLATFORM=$BUILD_ANDROID_PLATFORM -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -Wno-missing-prototypes" \
     --disable-shared \
     --enable-static \

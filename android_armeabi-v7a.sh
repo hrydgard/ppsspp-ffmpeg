@@ -91,7 +91,6 @@ function build_ARMv6
 ./configure --target-os=linux \
     --prefix=./android/armv6 \
     ${GENERAL} \
-    --sysroot=$NDK_PLATFORM \
     --extra-cflags=" --target=arm-linux-androideabi -O3 -DANDROID -fpic -fasm -fno-short-enums -fno-strict-aliasing -mfloat-abi=softfp -mfpu=vfp -marm -march=armv6" \
     --disable-shared \
     --enable-static \
@@ -117,7 +116,6 @@ function build_ARMv7
 ./configure --target-os=linux \
     --prefix=./android/armv7 \
     ${GENERAL} \
-    --sysroot=$NDK_PLATFORM \
     --extra-cflags=" --target=arm-linux-androideabi -O3 -DANDROID -fpic -fasm -fno-short-enums -fno-strict-aliasing -mfloat-abi=softfp -mfpu=vfp -marm -march=armv7-a" \
     --disable-shared \
     --enable-static \
