@@ -1,17 +1,26 @@
 #!/bin/bash
 
-BUILD_ANDROID_PLATFORM="android-21"
+# Run this inside git bash.
+
+BUILD_ANDROID_PLATFORM="21"
+
+HOST_TAG="windows-x86_64"
+
+#TRIPLE="armv7a-linux-androideabi"
+TRIPLE="aarch64-linux-android"
+#TRIPLE="x86_64-linux-android"
+
+TARGET="$TRIPLE$BUILD_ANDROID_PLATFORM"
 
 # Change NDK to your Android NDK location if needed
 if [ "$NDK" = "" ]; then
-    NDK=/c/Android/sdk/ndk/21.4.7075529
+    NDK=/c/Android/sdk/ndk/27.2.12479018
 fi
-if [ "$NDK_PLATFORM" = "" ]; then
-    NDK_PLATFORM=$NDK/platforms/$BUILD_ANDROID_PLATFORM/arch-arm64
+if [ "$NDK_USR_LIB" = "" ]; then
+    NDK_USR_LIB=$NDK/toolchains/llvm/prebuilt/$HOST_TAG/sysroot/usr/lib/$TRIPLE/$BUILD_ANDROID_PLATFORM
 fi
 if [ "$NDK_PREBUILT" = "" ]; then
-    NDK_PREBUILT=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/windows-x86_64
-    NDK_PREBUILTLLVM=$NDK/toolchains/llvm/prebuilt/windows-x86_64
+    NDK_PREBUILT=$NDK/toolchains/llvm/prebuilt/$HOST_TAG
 fi
 
 set -e
@@ -20,10 +29,11 @@ GENERAL="\
    --enable-cross-compile \
    --enable-pic \
    --extra-libs="-latomic" \
-   --cc=$NDK_PREBUILTLLVM/bin/clang \
-   --cross-prefix=$NDK_PREBUILT/bin/aarch64-linux-android- \
-   --ld=$NDK_PREBUILTLLVM/bin/clang \
-   --nm=$NDK_PREBUILT/bin/aarch64-linux-android-nm"
+   --cc=$NDK_PREBUILT/bin/clang \
+   --ld=$NDK_PREBUILT/bin/clang \
+   --nm=$NDK_PREBUILT/bin/llvm-nm \
+   --ar=$NDK_PREBUILT/bin/llvm-ar \
+   --ranlib=$NDK_PREBUILT/bin/llvm-ranlib"
 
 MODULES="\
    --disable-avdevice \
@@ -47,11 +57,13 @@ VIDEO_DECODERS="\
 AUDIO_DECODERS="\
     --enable-decoder=aac \
     --enable-decoder=aac_latm \
-    --enable-decoder=atrac3 \
-    --enable-decoder=atrac3p \
     --enable-decoder=mp3 \
     --enable-decoder=pcm_s16le \
     --enable-decoder=pcm_s8"
+
+# No longer needed!
+#    --enable-decoder=atrac3 \
+#    --enable-decoder=atrac3p \
 
 DEMUXERS="\
     --enable-demuxer=h264 \
@@ -68,11 +80,11 @@ DEMUXERS="\
     --enable-demuxer=wav"
 
 VIDEO_ENCODERS="\
-	  --enable-encoder=huffyuv
-	  --enable-encoder=ffv1"
+    --enable-encoder=huffyuv
+    --enable-encoder=ffv1"
 
 AUDIO_ENCODERS="\
-	  --enable-encoder=pcm_s16le"
+    --enable-encoder=pcm_s16le"
 
 MUXERS="\
   	--enable-muxer=avi"
@@ -87,15 +99,18 @@ PARSERS="\
 
 function build_arm64
 {
+
     # no-missing-prototypes because of a compile error seemingly unique to aarch64.
-./configure --logfile=conflog.txt --target-os=linux \
+./configure \
+    --logfile=conflog.txt \
+    --target-os=linux \
     --prefix=./android/arm64 \
     --arch=aarch64 \
     ${GENERAL} \
-    --extra-cflags=" --target=aarch64-none-linux-android21 -no-canonical-prefixes -fdata-sections -ffunction-sections -fno-limit-debug-info -funwind-tables -fPIC -O2 -DANDROID -DANDROID_PLATFORM=$BUILD_ANDROID_PLATFORM -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -Wno-missing-prototypes" \
+    --extra-cflags=" --target=$TARGET -no-canonical-prefixes -fdata-sections -ffunction-sections -fno-limit-debug-info -funwind-tables -fPIC -O2 -DANDROID -DANDROID_PLATFORM=android-$BUILD_ANDROID_PLATFORM -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -Wno-missing-prototypes" \
     --disable-shared \
     --enable-static \
-    --extra-ldflags=" -B$NDK_PREBUILT/bin/aarch64-linux-android- --target=aarch64-linux-android -Wl,--rpath-link,$NDK_PLATFORM/usr/lib -L$NDK_PLATFORM/usr/lib -L$NDK_PREBUILT/aarch64-linux-android/lib64 -nostdlib -lc -lm -ldl -llog" \
+    --extra-ldflags="--target=$TARGET -Wl,--rpath-link,$NDK_USR_LIB -L$NDK_USR_LIB -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
     --disable-everything \
     ${MODULES} \
@@ -108,7 +123,7 @@ function build_arm64
     ${PARSERS}
 
 make clean
-make -j4 install
+make -j8 install
 }
 
 build_arm64
