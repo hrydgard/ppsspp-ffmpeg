@@ -107,10 +107,10 @@ function build_arm64
     --prefix=./android/arm64 \
     --arch=aarch64 \
     ${GENERAL} \
-    --extra-cflags=" --target=$TARGET -no-canonical-prefixes -fdata-sections -ffunction-sections -fno-limit-debug-info -funwind-tables -fPIC -O2 -DANDROID -DANDROID_PLATFORM=android-$BUILD_ANDROID_PLATFORM -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -Wno-missing-prototypes" \
+    --extra-cflags=" --target=$TARGET -no-canonical-prefixes -fdata-sections -ffunction-sections -fno-limit-debug-info -funwind-tables -fPIC -O2 -DCONFIG_PIC -DANDROID -DANDROID_PLATFORM=android-$BUILD_ANDROID_PLATFORM -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -Wno-missing-prototypes" \
     --disable-shared \
     --enable-static \
-    --extra-ldflags="--target=$TARGET -Wl,--rpath-link,$NDK_USR_LIB -L$NDK_USR_LIB -nostdlib -lc -lm -ldl -llog" \
+    --extra-ldflags="--target=$TARGET -Wl,-Bsymbolic -Wl,--rpath-link,$NDK_USR_LIB -L$NDK_USR_LIB -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
     --disable-everything \
     ${MODULES} \
@@ -127,3 +127,7 @@ make -j8 install
 }
 
 build_arm64
+
+
+# NOTE: Ran into this relocation problem:
+# https://lists.ffmpeg.org/pipermail/ffmpeg-devel/2022-July/298734.html

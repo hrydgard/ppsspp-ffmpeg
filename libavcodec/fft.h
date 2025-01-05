@@ -115,7 +115,14 @@ struct FFTContext {
 #if CONFIG_HARDCODED_TABLES
 #define COSTABLE_CONST const
 #else
+
+// PPSSPP HACK
+#ifdef ANDROID
+#define COSTABLE_CONST __attribute__((visibility("hidden")))
+#else
 #define COSTABLE_CONST
+#endif
+
 #endif
 
 #define COSTABLE(size) \
