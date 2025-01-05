@@ -19,10 +19,11 @@
 #include "libavutil/aarch64/asm.S"
 
 function ff_prefetch_aarch64, export=1
+.L_ff_prefetch_aarch64:
         subs            w2,  w2,  #2
         prfm            pldl1strm, [x0]
         prfm            pldl1strm, [x0,  x1]
         add             x0,  x0,  x1,  lsl #1
-        b.gt            X(ff_prefetch_aarch64)
+        b.gt            .L_ff_prefetch_aarch64
         ret
 endfunc
