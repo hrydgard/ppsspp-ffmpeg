@@ -7,10 +7,6 @@ set -e
 
 ARCH="mips32"
 
-#   --enable-cross-compile \
-#   --cc=mipsel-linux-gcc \
-#   --cxx=mipsel-linux-g++ \
-
 GENERAL="
 	--target-os=linux \
 	--disable-mipsdspr1 \
