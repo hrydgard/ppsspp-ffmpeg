@@ -1,26 +1,48 @@
 #!/bin/bash
-#Change NDK to your Android NDK location
+
+# Run this inside git bash.
+
+BUILD_ANDROID_PLATFORM="21"
+
+HOST_TAG="windows-x86_64"
+
+TRIPLE="x86_64-linux-android"
+
+TARGET="$TRIPLE$BUILD_ANDROID_PLATFORM"
+
+# Change NDK to your Android NDK location if needed
 if [ "$NDK" = "" ]; then
-    NDK=/c/AndroidNDK
+    NDK=/c/Android/sdk/ndk/29.0.14206865
 fi
-if [ "$NDK_PLATFORM" = "" ]; then
-    NDK_PLATFORM=$NDK/platforms/android-21/arch-x86_64
+if [ "$NDK_USR_LIB" = "" ]; then
+    NDK_USR_LIB=$NDK/toolchains/llvm/prebuilt/$HOST_TAG/sysroot/usr/lib/$TRIPLE/$BUILD_ANDROID_PLATFORM
 fi
 if [ "$NDK_PREBUILT" = "" ]; then
-    NDK_PREBUILT=$NDK/toolchains/x86_64-4.9/prebuilt/windows-x86_64
-    NDK_PREBUILTLLVM=$NDK/toolchains/llvm/prebuilt/windows-x86_64
+    NDK_PREBUILT=$NDK/toolchains/llvm/prebuilt/$HOST_TAG
 fi
 
 set -e
 
+# --disable-asm: several hand-written x86 inline-asm blocks (legacy MMX/3DNow in
+# libswscale, and H.264 CABAC decoding in libavcodec/x86/cabac.h and h264_i386.h)
+# take the address of default-visibility extern data symbols directly via "lea
+# sym(%rip)". That's fixed literal asm text, not compiler-chosen codegen, so it
+# doesn't get routed through the GOT the way normal -fPIC C symbol access would -
+# ld.lld rejects it when linking into a shared object ("relocation R_X86_64_PC32
+# cannot be used against symbol ...; recompile with -fPIC", even though -fPIC was
+# passed). android_x86.sh hit the same class of problem for 32-bit x86 and works
+# around it the same way. Real Android hardware never ships x86_64 (it's emulator
+# -only), so losing the x86 SIMD paths here costs nothing that matters.
 GENERAL="\
    --enable-cross-compile \
    --enable-pic \
+   --disable-asm \
    --extra-libs="-latomic" \
-   --cc=$NDK_PREBUILTLLVM/bin/clang \
-   --cross-prefix=$NDK_PREBUILT/bin/x86_64-linux-android- \
-   --ld=$NDK_PREBUILTLLVM/bin/clang \
-   --nm=$NDK_PREBUILT/bin/x86_64-linux-android-nm"
+   --cc=$NDK_PREBUILT/bin/clang \
+   --ld=$NDK_PREBUILT/bin/clang \
+   --nm=$NDK_PREBUILT/bin/llvm-nm \
+   --ar=$NDK_PREBUILT/bin/llvm-ar \
+   --ranlib=$NDK_PREBUILT/bin/llvm-ranlib"
 
 MODULES="\
    --disable-avdevice \
@@ -44,12 +66,10 @@ VIDEO_DECODERS="\
 AUDIO_DECODERS="\
     --enable-decoder=aac \
     --enable-decoder=aac_latm \
-    --enable-decoder=atrac3 \
-    --enable-decoder=atrac3p \
     --enable-decoder=mp3 \
     --enable-decoder=pcm_s16le \
     --enable-decoder=pcm_s8"
-  
+
 DEMUXERS="\
     --enable-demuxer=h264 \
     --enable-demuxer=m4v \
@@ -88,10 +108,10 @@ function build_x86_64
     --prefix=./android/x86_64 \
     --arch=x86_64 \
     ${GENERAL} \
-    --extra-cflags=" --target=x86_64-linux-android -O3 -DANDROID -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -fomit-frame-pointer -march=x86-64" \
+    --extra-cflags=" --target=$TARGET -no-canonical-prefixes -fdata-sections -ffunction-sections -fno-limit-debug-info -funwind-tables -fPIC -O3 -DCONFIG_PIC -DANDROID -DANDROID_PLATFORM=android-$BUILD_ANDROID_PLATFORM -Dipv6mr_interface=ipv6mr_ifindex -fasm -fno-short-enums -fno-strict-aliasing -fomit-frame-pointer -march=x86-64" \
     --disable-shared \
     --enable-static \
-    --extra-ldflags=" -B$NDK_PREBUILT/bin/x86_64-linux-android- --target=x86_64-linux-android -Wl,--rpath-link,$NDK_PLATFORM/usr/lib64 -L$NDK_PLATFORM/usr/lib64 -L$NDK_PREBUILT/x86_64-linux-android/lib -nostdlib -lc -lm -ldl -llog" \
+    --extra-ldflags="--target=$TARGET -Wl,-Bsymbolic -Wl,--rpath-link,$NDK_USR_LIB -L$NDK_USR_LIB -nostdlib -lc -lm -ldl -llog" \
     --enable-zlib \
     --disable-everything \
     ${MODULES} \
@@ -104,7 +124,7 @@ function build_x86_64
     ${PARSERS}
 
 make clean
-make -j4 install
+make -j16 install
 }
 
 build_x86_64

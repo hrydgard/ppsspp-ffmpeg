@@ -4011,7 +4011,7 @@ int av_packet_from_data(AVPacket *pkt, uint8_t *data, int size);
  * @warning This is a hack - the packet memory allocation stuff is broken. The
  * packet is allocated if it was not really allocated.
  *
- * @deprecated Use av_packet_ref
+ * @deprecated Use av_packet_ref or av_packet_make_refcounted
  */
 attribute_deprecated
 int av_dup_packet(AVPacket *pkt);
@@ -4172,6 +4172,21 @@ void av_packet_move_ref(AVPacket *dst, AVPacket *src);
  *
  */
 int av_packet_copy_props(AVPacket *dst, const AVPacket *src);
+
+/**
+ * Ensure the data described by a given packet is reference counted.
+ *
+ * @note This function does not ensure that the reference will be writable.
+ * 	 Use av_packet_make_writable instead for that purpose.
+ *
+ * @see av_packet_ref
+ *
+ * @param pkg packet whose data should be made reference counted.
+ *
+ * @return 0 on success, a negative AVERROR on error. On failure, the
+ *	   packet is unchanged.
+ */
+int av_packet_make_refcounted(AVPacket *pkt);
 
 /**
  * Convert valid timing fields (timestamps / durations) in a packet from one
